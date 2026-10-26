@@ -34,6 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/page-header";
 import { RequestDialog } from "@/components/request-dialog";
 import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
@@ -80,7 +81,7 @@ const dateRange = (r: RequestDto) =>
 
 export default function RequestsPage() {
   const user = useUser();
-  const isManager = user?.role === "ADMIN" || user?.role === "DIRECTOR";
+  const isManager = user?.role === "ADMIN" || user?.role === "DIRECTOR" || user?.isTeamLead;
 
   const [mine, setMine] = useState<RequestDto[]>([]);
   const [team, setTeam] = useState<RequestDto[]>([]);
@@ -137,15 +138,11 @@ export default function RequestsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Requests</h1>
-          <p className="text-sm text-muted-foreground">Leave and work-from-home requests.</p>
-        </div>
+      <PageHeader title="Requests" description="Leave and work-from-home requests.">
         <Button onClick={() => setDialogOpen(true)}>
           <CalendarPlus className="h-4 w-4" /> New request
         </Button>
-      </div>
+      </PageHeader>
 
       <Tabs defaultValue={isManager ? "team" : "mine"}>
         <TabsList>
@@ -158,7 +155,7 @@ export default function RequestsPage() {
             <Card>
               <CardHeader className="flex-row items-center justify-between space-y-0">
                 <div>
-                  <CardTitle className="text-base">Requests from employees</CardTitle>
+                  <CardTitle className="text-base">Requests from your people</CardTitle>
                   <CardDescription>Approve or reject leave and WFH requests.</CardDescription>
                 </div>
                 <Select value={filter} onValueChange={setFilter}>

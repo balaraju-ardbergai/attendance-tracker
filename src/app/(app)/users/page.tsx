@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
 import { ROLE_LABEL } from "@/lib/roles";
@@ -180,14 +181,10 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Users</h1>
-          <p className="text-sm text-muted-foreground">
-            Add people and manage their roles. Major changes need Director approval
-            {isDirector ? " — you can apply them directly." : "."}
-          </p>
-        </div>
+      <PageHeader
+        title="Users"
+        description={`Add people and manage their roles. Major changes need Director approval${isDirector ? " — you can apply them directly." : "."}`}
+      >
         <Button
           onClick={() => {
             resetAddForm();
@@ -196,7 +193,7 @@ export default function UsersPage() {
         >
           <UserPlus className="h-4 w-4" /> Add user
         </Button>
-      </div>
+      </PageHeader>
 
       {isDirector && pendingCount > 0 && (
         <Card>

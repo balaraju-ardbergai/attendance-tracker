@@ -376,6 +376,71 @@ async function main() {
     ],
   });
 
+  /* ------------------------- Projects (Jira-style) ------------------------- */
+
+  const makeDate = (offsetDays: number) => fromKey(toKey(new Date(now.getTime() + offsetDays * 86400_000)));
+
+  const prd = await prisma.project.create({
+    data: {
+      key: "PRD",
+      name: "Product Engineering",
+      description: "Agile development of the OrgPulse product — sprints, epics and stories.",
+      methodology: "SCRUM",
+      teamId: engineering.id,
+      leadId: users["david@org.com"],
+      createdById: hrId,
+    },
+  });
+  const sprint1 = await prisma.sprint.create({
+    data: { projectId: prd.id, name: "Sprint 1", goal: "Core attendance flows live", startDate: makeDate(-21), endDate: makeDate(-7), status: "COMPLETED" },
+  });
+  const sprint2 = await prisma.sprint.create({
+    data: { projectId: prd.id, name: "Sprint 2", goal: "Reporting and CSV export", startDate: makeDate(-3), endDate: makeDate(11), status: "ACTIVE" },
+  });
+  const prdEpic = await prisma.task.create({
+    data: { projectId: prd.id, key: "PRD-1", seq: 1, type: "EPIC", title: "Attendance export & reporting", description: "Managers can export and analyse team attendance.", status: "IN_PROGRESS", progress: 55, createdById: hrId },
+  });
+  const prdIssues: { key: string; seq: number; title: string; type: string; status: string; progress: number; points: number; sprintId?: string; epicId?: string; assignee: string; ac?: string; priority?: string }[] = [
+    { key: "PRD-2", seq: 2, title: "CSV export of monthly attendance", type: "STORY", status: "COMPLETED", progress: 100, points: 5, sprintId: sprint1.id, epicId: prdEpic.id, assignee: "david@org.com" },
+    { key: "PRD-3", seq: 3, title: "Login page shows org branding", type: "TASK", status: "COMPLETED", progress: 100, points: 2, sprintId: sprint1.id, assignee: "employee@org.com" },
+    { key: "PRD-4", seq: 4, title: "Fix duplicate attendance on double click", type: "BUG", status: "COMPLETED", progress: 100, points: 1, sprintId: sprint1.id, priority: "HIGH", assignee: "employee@org.com" },
+    { key: "PRD-5", seq: 5, title: "XLSX export with formatting", type: "STORY", status: "IN_PROGRESS", progress: 60, points: 8, sprintId: sprint2.id, epicId: prdEpic.id, assignee: "david@org.com", ac: "Given a month with attendance, when HR exports, then the XLSX has per-employee sheets and stat bars." },
+    { key: "PRD-6", seq: 6, title: "Chart for leave trends", type: "STORY", status: "IN_PROGRESS", progress: 30, points: 5, sprintId: sprint2.id, epicId: prdEpic.id, assignee: "employee@org.com" },
+    { key: "PRD-7", seq: 7, title: "Rate-limit export endpoint", type: "TASK", status: "TODO", progress: 0, points: 3, sprintId: sprint2.id, assignee: "sara@org.com" },
+    { key: "PRD-8", seq: 8, title: "Email report PDF attachment", type: "STORY", status: "TODO", progress: 0, points: 8, epicId: prdEpic.id, assignee: "david@org.com", priority: "HIGH" },
+  ];
+  await prisma.task.createMany({
+    data: prdIssues.map((i) => ({
+      projectId: prd.id, key: i.key, seq: i.seq, type: i.type as never, title: i.title,
+      status: i.status as never, progress: i.progress, storyPoints: i.points,
+      sprintId: i.sprintId ?? null, epicId: i.epicId ?? null,
+      assigneeId: users[i.assignee], teamId: engineering.id,
+      acceptanceCriteria: i.ac ?? null, priority: (i.priority ?? "MEDIUM") as never,
+      createdById: hrId,
+    })),
+  });
+
+  const ops = await prisma.project.create({
+    data: {
+      key: "OPS",
+      name: "Office Setup 2.0",
+      description: "Waterfall project: new office layout and equipment rollout.",
+      methodology: "WATERFALL",
+      leadId: hrId,
+      createdById: hrId,
+    },
+  });
+  const phase1 = await prisma.phase.create({ data: { projectId: ops.id, name: "Requirements & Budget", order: 1, startDate: makeDate(-14), endDate: makeDate(-7) } });
+  const phase2 = await prisma.phase.create({ data: { projectId: ops.id, name: "Procurement & Build", order: 2, startDate: makeDate(-6), endDate: makeDate(7) } });
+  await prisma.phase.create({ data: { projectId: ops.id, name: "Rollout & Training", order: 3, startDate: makeDate(8), endDate: makeDate(21) } });
+  await prisma.task.createMany({
+    data: [
+      { projectId: ops.id, key: "OPS-1", seq: 1, type: "TASK", title: "Collect workstation requirements from teams", status: "COMPLETED", progress: 100, assigneeId: users["anita@org.com"], phaseId: phase1.id, createdById: hrId },
+      { projectId: ops.id, key: "OPS-2", seq: 2, type: "TASK", title: "Vendor quotes for monitors & chairs", status: "IN_PROGRESS", progress: 50, assigneeId: users["hr@org.com"], phaseId: phase2.id, createdById: hrId },
+      { projectId: ops.id, key: "OPS-3", seq: 3, type: "TASK", title: "Schedule desk reassembly weekend", status: "TODO", progress: 0, assigneeId: users["david@org.com"], phaseId: phase2.id, createdById: hrId },
+    ],
+  });
+
   console.log("\nSeed complete. Demo accounts:");
   for (const p of PEOPLE) {
     console.log(`  ${p.role.padEnd(9)} ${p.email.padEnd(20)} password: ${p.password}`);

@@ -10,6 +10,8 @@ export async function GET() {
     const user = await prisma.user.findUnique({ where: { id: session.userId } });
     if (!user || !user.isActive) return ok({ user: null });
 
+    const ledTeams = await prisma.team.count({ where: { leadId: user.id } });
+
     return ok({
       user: {
         id: user.id,
@@ -20,6 +22,7 @@ export async function GET() {
         pictureUrl: user.pictureUrl,
         mustResetPassword: user.mustResetPassword,
         expenseAccess: user.role === "DIRECTOR" || user.role === "ADMIN" || user.expenseAccess,
+        isTeamLead: ledTeams > 0,
       },
     });
   });

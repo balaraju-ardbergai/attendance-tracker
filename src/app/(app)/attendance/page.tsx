@@ -21,6 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MonthGrid } from "@/components/month-grid";
+import { PageHeader } from "@/components/page-header";
 import { RequestDialog } from "@/components/request-dialog";
 import { StatBar, StatLegend } from "@/components/stat-bar";
 import { api, getPosition, timeLabel } from "@/lib/client";
@@ -114,15 +115,11 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Attendance</h1>
-          <p className="text-sm text-muted-foreground">Mark your day and track your month.</p>
-        </div>
+      <PageHeader title="Attendance" description="Mark your day and track your month.">
         <Button onClick={() => setDialogOpen(true)}>
           <CalendarPlus className="h-4 w-4" /> Request leave / WFH
         </Button>
-      </div>
+      </PageHeader>
 
       {/* Today */}
       <Card>

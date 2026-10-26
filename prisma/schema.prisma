@@ -67,6 +67,8 @@ enum ExpenseCategory {
 enum TaskStatus {
   TODO
   IN_PROGRESS
+  IN_REVIEW
+  BLOCKED
   COMPLETED
 }
 
@@ -74,6 +76,24 @@ enum TaskPriority {
   LOW
   MEDIUM
   HIGH
+}
+
+enum TaskType {
+  EPIC
+  STORY
+  TASK
+  BUG
+}
+
+enum Methodology {
+  SCRUM
+  WATERFALL
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
 }
 
 model User {
@@ -114,6 +134,8 @@ model User {
   teamsCreated       Team[]     @relation("TeamCreator")
   tasksAssigned      Task[]     @relation("TaskAssignee")
   tasksCreated       Task[]     @relation("TaskCreator")
+  projectsLed        Project[]  @relation("ProjectLead")
+  projectsCreated    Project[]  @relation("ProjectCreator")
 }
 
 model Attendance {
@@ -311,6 +333,7 @@ model Team {
   members  TeamMember[]
   expenses Expense[]
   tasks    Task[]
+  projects Project[]
 }
 
 model TeamMember {
@@ -358,13 +381,81 @@ model Task {
   teamId      String?
   dueDate     DateTime?    @db.Date
   createdById String
+  // Jira-style work item fields (all optional so simple adhoc tasks still work)
+  projectId   String?
+  key         String?
+  seq         Int?
+  type        TaskType     @default(TASK)
+  epicId      String?
+  sprintId    String?
+  phaseId     String?
+  storyPoints Int?
+  acceptanceCriteria String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   assignee User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   team     Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
   creator  User  @relation("TaskCreator", fields: [createdById], references: [id])
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint   Sprint?  @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  phase    Phase?   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  epic     Task?    @relation("TaskEpic", fields: [epicId], references: [id], onDelete: SetNull)
+  subIssues Task[]  @relation("TaskEpic")
 
   @@index([assigneeId])
   @@index([status])
+  @@index([projectId])
+  @@index([sprintId])
+  @@index([epicId])
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  name        String
+  description String?
+  methodology Methodology @default(SCRUM)
+  teamId      String?
+  leadId      String?
+  createdById String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  lead     User?    @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  creator  User     @relation("ProjectCreator", fields: [createdById], references: [id])
+  team     Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  sprints  Sprint[]
+  phases   Phase[]
+  tasks    Task[]
+}
+
+model Sprint {
+  id        String       @id @default(cuid())
+  projectId String
+  name      String
+  goal      String?
+  startDate DateTime?    @db.Date
+  endDate   DateTime?    @db.Date
+  status    SprintStatus @default(PLANNED)
+  createdAt DateTime     @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+}
+
+model Phase {
+  id        String    @id @default(cuid())
+  projectId String
+  name      String
+  order     Int
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId, order])
 }

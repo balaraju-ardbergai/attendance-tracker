@@ -14,6 +14,7 @@ import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
 import { monthLabel } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/roles";
+import { PageHeader } from "@/components/page-header";
 
 type Stats = {
   workingDays: number;
@@ -99,12 +100,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Organization</h1>
-        <p className="text-sm text-muted-foreground">
-          {data ? `${data.month.label} at a glance` : "Loading…"}
-        </p>
-      </div>
+      <PageHeader title="Organization" description={data ? `${data.month.label} at a glance` : "Loading…"} />
 
       {!data ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

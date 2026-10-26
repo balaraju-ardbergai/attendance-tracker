@@ -28,6 +28,7 @@ import { api } from "@/lib/client";
 import { formatKey } from "@/lib/dates";
 import { APPROVAL_TYPE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 type ApprovalDto = {
   id: string;
@@ -91,12 +92,7 @@ export default function ApprovalsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Approvals</h1>
-        <p className="text-sm text-muted-foreground">
-          Authorize administrative requests from HR Admins.
-        </p>
-      </div>
+      <PageHeader title="Approvals" description="Authorize administrative requests from HR Admins." />
 
       <div className="space-y-4">
         {pending.length === 0 && (

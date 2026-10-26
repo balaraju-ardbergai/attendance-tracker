@@ -1,4 +1,4 @@
-# Attendance Portal
+# Org Tracker
 
 An organization attendance tracking application built with **Next.js (App Router) + shadcn/ui + PostgreSQL (Prisma)**, ready to deploy on **Vercel**.
 
@@ -88,7 +88,7 @@ An organization attendance tracking application built with **Next.js (App Router
 
 1. On the sending Google account, enable **2-Step Verification** (myaccount.google.com → Security).
 2. Go to **Security → 2-Step Verification → App passwords** (or https://myaccount.google.com/apppasswords).
-3. Create one (name it "Attendance Portal"), copy the 16-character password into `GMAIL_APP_PASSWORD` (spaces are stripped automatically).
+3. Create one (name it "Org Tracker"), copy the 16-character password into `GMAIL_APP_PASSWORD` (spaces are stripped automatically).
 4. Restart the dev server. Regular account passwords do **not** work — Gmail requires App Passwords for SMTP.
 
 ## Connectors setup

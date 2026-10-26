@@ -54,7 +54,7 @@ export default function LoginPage() {
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <CalendarCheck className="h-6 w-6" />
         </div>
-        <CardTitle className="text-xl">Attendance Portal</CardTitle>
+        <CardTitle className="text-xl">Org Tracker</CardTitle>
         <CardDescription>Sign in with your work email</CardDescription>
       </CardHeader>
       <CardContent>

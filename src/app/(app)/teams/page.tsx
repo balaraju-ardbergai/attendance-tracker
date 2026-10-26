@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
 import { rupees } from "@/lib/money";
@@ -60,17 +61,22 @@ export default function TeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Teams</h1>
-          <p className="text-sm text-muted-foreground">How the organization is grouped — members, tasks and spend per team.</p>
-        </div>
-        {canManage && <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New team</Button>}
-      </div>
+      <PageHeader
+        title="Teams"
+        description="How the organization is grouped — members, tasks and spend per team."
+      >
+        {canManage && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> New team
+          </Button>
+        )}
+      </PageHeader>
 
       {!teams ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)}
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
         </div>
       ) : teams.length === 0 ? (
         <Card>
@@ -81,7 +87,11 @@ export default function TeamsPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {teams.map((team) => (
-            <Card key={team.id} className="cursor-pointer transition-shadow hover:shadow-md" onClick={() => router.push(`/teams/${team.id}`)}>
+            <Card
+              key={team.id}
+              className="cursor-pointer transition-shadow hover:shadow-md"
+              onClick={() => router.push(`/teams/${team.id}`)}
+            >
               <CardHeader>
                 <CardTitle className="text-base">{team.name}</CardTitle>
                 <CardDescription className="line-clamp-2">{team.description ?? "No description."}</CardDescription>

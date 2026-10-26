@@ -28,7 +28,7 @@ function getTransporter(): Transporter | null {
 
 export async function sendMail(mail: { to: string; subject: string; html: string }): Promise<{ delivered: boolean }> {
   const transport = getTransporter();
-  const from = `Attendance Portal <${process.env.GMAIL_USER}>`;
+  const from = `Org Tracker <${process.env.GMAIL_USER}>`;
   if (!transport) {
     console.log(
       `\n===== [dev email - Gmail not configured] =====\nTo: ${mail.to}\nFrom: ${from}\nSubject: ${mail.subject}\n${mail.html}\n=============================================\n`,
@@ -59,16 +59,16 @@ function wrap(title: string, body: string) {
   <div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #e4e4e7;">
     <h2 style="margin:0 0 16px;color:#18181b;">${escapeHtml(title)}</h2>
     ${body}
-    <p style="margin-top:28px;font-size:12px;color:#71717a;">Attendance Portal — automated message.</p>
+    <p style="margin-top:28px;font-size:12px;color:#71717a;">Org Tracker — automated message.</p>
   </div></body></html>`;
 }
 
 export function inviteEmail(name: string, email: string, tempPassword: string) {
   return {
     to: email,
-    subject: "You have been added to the Attendance Portal",
+    subject: "You have been added to the Org Tracker",
     html: wrap(
-      "Welcome to the Attendance Portal",
+      "Welcome to the Org Tracker",
       `<p>Hi ${escapeHtml(name)},</p>
        <p>An account has been created for you. Sign in at <a href="${appUrl("/login")}">${appUrl("/login")}</a> using:</p>
        <p><b>Email:</b> ${escapeHtml(email)}<br/><b>Temporary password:</b> <code style="background:#f4f4f5;padding:2px 6px;border-radius:4px;">${tempPassword}</code></p>
@@ -94,7 +94,7 @@ export function passwordResetOtpEmail(name: string, email: string, code: string)
 export function passwordChangedEmail(name: string, email: string) {
   return {
     to: email,
-    subject: "Your Attendance Portal password was changed",
+    subject: "Your Org Tracker password was changed",
     html: wrap(
       "Password changed",
       `<p>Hi ${escapeHtml(name)},</p>
@@ -131,7 +131,7 @@ export function approvalRequestedEmail(
 ) {
   return {
     to: directorEmail,
-    subject: "Approval needed in the Attendance Portal",
+    subject: "Approval needed in the Org Tracker",
     html: wrap(
       "Approval requested",
       `<p>Hi ${escapeHtml(directorName)},</p>
@@ -154,7 +154,7 @@ export function approvalOutcomeEmail(
       approved ? "Request approved" : "Request rejected",
       `<p>Hi ${escapeHtml(name)},</p>
        <p>Your request <b>${escapeHtml(what)}</b> was <b>${approved ? "approved" : "rejected"}</b> by a Director.</p>
-       <p><a href="${appUrl()}">Open the Attendance Portal</a></p>`,
+       <p><a href="${appUrl()}">Open the Org Tracker</a></p>`,
     ),
   };
 }

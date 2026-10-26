@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
+import { ledTeamIds } from "@/lib/permissions";
 import { fromKey, serverTodayKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 import { REQUEST_TYPE_LABEL } from "@/lib/roles";
@@ -13,9 +14,28 @@ export async function GET(req: Request) {
     const scope = url.searchParams.get("scope") ?? "mine";
     const isManager = session.role === "ADMIN" || session.role === "DIRECTOR";
 
-    if (scope === "team" && isManager) {
+    if (scope === "team") {
+      if (isManager) {
+        const requests = await prisma.request.findMany({
+          where: { userId: { not: session.userId } },
+          include: { user: { select: { id: true, name: true, email: true, department: true, pictureUrl: true } } },
+          orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+        });
+        return ok({ requests });
+      }
+      // Team leads review requests from their direct reports and their teams' members.
+      const teamIds = await ledTeamIds(session.userId);
+      if (teamIds.length === 0) return ok({ requests: [] });
       const requests = await prisma.request.findMany({
-        where: { userId: { not: session.userId } },
+        where: {
+          userId: { not: session.userId },
+          user: {
+            OR: [
+              { managerId: session.userId },
+              { teamMemberships: { some: { teamId: { in: teamIds } } } },
+            ],
+          },
+        },
         include: { user: { select: { id: true, name: true, email: true, department: true, pictureUrl: true } } },
         orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       });

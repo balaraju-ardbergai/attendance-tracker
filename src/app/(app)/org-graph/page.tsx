@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, initials } from "@/lib/client";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
+import { PageHeader } from "@/components/page-header";
 
 type OrgUser = {
   id: string;
@@ -92,12 +93,7 @@ export default function OrgGraphPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Org Graph</h1>
-        <p className="text-sm text-muted-foreground">
-          Reporting structure of the organization. Managers are assigned from the Users page.
-        </p>
-      </div>
+      <PageHeader title="Org Graph" description="Reporting structure of the organization. Managers are assigned from the Users page." />
 
       {!users ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-72" />)}</div>

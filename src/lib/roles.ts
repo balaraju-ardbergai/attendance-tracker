@@ -112,6 +112,15 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   TASK_CREATED: "Created a task",
   TASK_UPDATED: "Updated a task",
   TASK_DELETED: "Deleted a task",
+  PROJECT_CREATED: "Created a project",
+  PROJECT_UPDATED: "Updated a project",
+  PROJECT_DELETED: "Deleted a project",
+  SPRINT_CREATED: "Created a sprint",
+  SPRINT_UPDATED: "Updated a sprint",
+  SPRINT_DELETED: "Deleted a sprint",
+  PHASE_CREATED: "Created a phase",
+  PHASE_UPDATED: "Updated a phase",
+  PHASE_DELETED: "Deleted a phase",
 };
 
 // Status colors used by badges, the month grid and the combined stat bar.

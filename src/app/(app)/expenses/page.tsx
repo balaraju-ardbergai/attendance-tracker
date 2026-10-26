@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { BarChartCard, ChartLegend, DonutChartCard } from "@/components/charts";
+import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api } from "@/lib/client";
 import { formatKey, serverTodayKey } from "@/lib/dates";
@@ -87,7 +88,6 @@ export default function ExpensesPage() {
   const [teams, setTeams] = useState<TeamDto[]>([]);
   const [denied, setDenied] = useState(false);
 
-  // filters
   const [fCategory, setFCategory] = useState("ALL");
   const [fTeam, setFTeam] = useState("ALL");
   const [fFrom, setFFrom] = useState("");
@@ -188,13 +188,10 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Expenses</h1>
-          <p className="text-sm text-muted-foreground">
-            Vendor & client billings, office purchases and event spends — all in one place.
-          </p>
-        </div>
+      <PageHeader
+        title="Expenses"
+        description="Vendor & client billings, office purchases and event spends — all in one place."
+      >
         <Button
           onClick={() => {
             setEditing(null);
@@ -203,7 +200,7 @@ export default function ExpensesPage() {
         >
           <Plus className="h-4 w-4" /> Record expense
         </Button>
-      </div>
+      </PageHeader>
 
       {!analytics ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -375,7 +372,7 @@ export default function ExpensesPage() {
                 <CardTitle className="text-base">Scheduled email reports</CardTitle>
                 <CardDescription>
                   Weekly reports are sent every Monday 09:00 and monthly reports on the 1st 09:00 (Vercel Cron — set the
-                  CRON_SECRET environment variable in production). Recipients must have a verified email.
+                  CRON_SECRET environment variable in production).
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">

@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/client";
+import { PageHeader } from "@/components/page-header";
 
 type ProviderDto = {
   id: "outlook" | "gmail";
@@ -123,12 +124,7 @@ function ConnectorsInner() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Connectors</h1>
-        <p className="text-sm text-muted-foreground">
-          Link external services to your account. Outlook and Gmail are supported.
-        </p>
-      </div>
+      <PageHeader title="Connectors" description="Link external services to your account. Outlook and Gmail are supported." />
 
       {!providers ? (
         <div className="space-y-4">

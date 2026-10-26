@@ -208,6 +208,8 @@ export default function TeamDetailPage() {
         </CardContent>
       </Card>
 
+      {(canManage || team.leadId === me?.id) && <MemberDetailsSection teamId={teamId} />}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -443,5 +445,105 @@ function EditTeamDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ------------------------------ Member details ------------------------------ */
+
+type OverviewMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string | null;
+  pictureUrl: string | null;
+  attendance: { workingDays: number; present: number; leave: number; wfh: number; absent: number };
+  pendingRequests: { type: string; startDate: string; endDate: string }[];
+  openTasks: { id: string; key: string | null; title: string; status: string; progress: number; dueDate: string | null }[];
+  courses: { name: string; percent: number }[];
+};
+
+function MemberDetailsSection({ teamId }: { teamId: string }) {
+  const [members, setMembers] = useState<OverviewMember[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ members: OverviewMember[] }>(`/api/teams/${teamId}/overview`)
+      .then((d) => setMembers(d.members))
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load member details."));
+  }, [teamId]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Member details</CardTitle>
+        <CardDescription>
+          Attendance this month, pending requests, open tasks and course progress for everyone on this team.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <p className="text-sm text-muted-foreground">{error}</p>
+        ) : !members ? (
+          <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}</div>
+        ) : members.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">No members yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {members.map((m) => (
+              <div key={m.id} className="rounded-lg border p-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <Avatar className="h-8 w-8">
+                    {m.pictureUrl && <AvatarImage src={m.pictureUrl} alt={m.name} />}
+                    <AvatarFallback className="text-xs">{initials(m.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{m.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{m.email}{m.department ? ` · ${m.department}` : ""}</p>
+                  </div>
+                  <Badge variant="outline" className={cn(m.attendance.absent === 0 ? "border-emerald-500/50 text-emerald-600" : "border-amber-500/50 text-amber-600")}>
+                    {m.attendance.present}/{m.attendance.workingDays} days present
+                  </Badge>
+                </div>
+                <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                  <div>
+                    <p className="font-medium text-foreground">This month</p>
+                    <p>{m.attendance.present} present · {m.attendance.leave} leave · {m.attendance.wfh} WFH · {m.attendance.absent} absent</p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Pending requests</p>
+                    {m.pendingRequests.length === 0 ? (
+                      <p>None</p>
+                    ) : (
+                      m.pendingRequests.map((r, i) => (
+                        <p key={i}>{r.type === "LEAVE" ? "Leave" : "WFH"}: {formatKey(r.startDate.slice(0, 10))} → {formatKey(r.endDate.slice(0, 10))}</p>
+                      ))
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Open tasks ({m.openTasks.length})</p>
+                    {m.openTasks.slice(0, 2).map((t) => (
+                      <p key={t.id} className="truncate">{t.key ? `${t.key}: ` : ""}{t.title} ({t.progress}%)</p>
+                    ))}
+                    {m.openTasks.length > 2 && <p>+{m.openTasks.length - 2} more</p>}
+                    {m.openTasks.length === 0 && <p>None</p>}
+                  </div>
+                </div>
+                {m.courses.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {m.courses.map((c) => (
+                      <span key={c.name} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px]">
+                        {c.name}
+                        <span className="font-semibold text-foreground">{c.percent}%</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

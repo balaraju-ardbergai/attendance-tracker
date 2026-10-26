@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { api } from "@/lib/client";
 import { AUDIT_ACTION_LABEL } from "@/lib/roles";
+import { PageHeader } from "@/components/page-header";
 
 type AuditDto = {
   id: string;
@@ -44,12 +45,7 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">HR Activity</h1>
-        <p className="text-sm text-muted-foreground">
-          Actions taken by HR Admins and Directors across the organization.
-        </p>
-      </div>
+      <PageHeader title="HR Activity" description="Actions taken by HR Admins and Directors across the organization." />
 
       <Card>
         <CardContent className="pt-6">

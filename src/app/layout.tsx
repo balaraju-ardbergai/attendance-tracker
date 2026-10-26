@@ -6,8 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Attendance Portal",
-  description: "Organization attendance, leave and WFH tracking",
+  title: "Org Tracker",
+  description: "Org Tracker — attendance, courses, expenses, teams, org and work tracking",
 };
 
 export default function RootLayout({

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api } from "@/lib/client";
 import { formatKey } from "@/lib/dates";
@@ -60,19 +61,16 @@ export default function CoursesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Courses</h1>
-          <p className="text-sm text-muted-foreground">
-            Certification and training tracks with milestone progress for the org and each participant.
-          </p>
-        </div>
+      <PageHeader
+        title="Courses"
+        description="Certification and training tracks with milestone progress for the org and each participant."
+      >
         {canManage && (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> New course
           </Button>
         )}
-      </div>
+      </PageHeader>
 
       {!courses ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
