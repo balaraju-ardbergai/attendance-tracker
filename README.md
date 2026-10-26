@@ -12,8 +12,9 @@ An organization attendance tracking application built with **Next.js (App Router
 | **Forgot password** | 6-digit OTP to the registered email, valid 5 minutes, single use; confirmation email after reset |
 | **User addition** | HR submits name/email → Director approves → user is created with a temporary password + invitation email. Directors can add users directly. |
 | **HR management** | Assign/remove HR role, remove/reactivate users — Directors apply directly, HR Admins request it (approval queue) |
-| **Attendance** | One-click daily mark with time + optional geolocation, clock-out, late detection (after 09:30), month calendar view |
+| **Attendance** | One-click daily mark with time + optional geolocation, clock-out, month calendar view. Statuses: Present / Leave / WFH / Absent. |
 | **Requests** | Leave / WFH with date range + reason; approve/reject with note (HR Admin + Director), cancel (owner); approval writes LEAVE/WFH onto the employee's calendar and emails the outcome |
+| **Courses** | Certification & training tracks modelled on a progress-tracker spreadsheet: ordered milestones (phase-grouped: prerequisite / prep course / exam, with links + durations), per-person progress per milestone (10–90% partial or Completed), per-person summary (steps completed, % complete, currently-at, status) and per-milestone org-level progress. Optional class attendance: the creator enables it, sets the schedule, generates recurring session dates, and marks/collects attendance (participants can mark themselves for today's class). |
 | **Organization dashboard** | Summary cards + one card per employee (picture, name, email, role) with a combined progress bar of present/late/leave/WFH/absent for the current month |
 | **HR Activity (audit)** | Director-only trail of every administrative action (who, what, whom, when) |
 | **Connectors** | OAuth connections for Outlook (Microsoft Graph) and Gmail (Google), per user, with real token exchange — just add API keys |
@@ -98,19 +99,31 @@ Until credentials exist the UI shows "Not configured" and doesn't let anyone sta
 - **Geolocation** uses the browser API; browsers only expose it on `localhost` or HTTPS. If the user denies it, attendance is still marked without coordinates.
 - **Working days** are Mon–Fri; today only counts as "absent" in stats once marked (or after the day passes).
 - **Removals** deactivate accounts (history preserved) rather than deleting rows.
-- **Late** = attendance marked after 09:30 server time (see `src/app/api/attendance/route.ts`).
+- **Course progress** mirrors the tracker sheet: a milestone counts as a completed step at 100%; partial percentages (10–90%) contribute fractionally to "% Complete"; "Currently at" is the first milestone below 100% in order.
 - **pgAdmin** can point at the same `DATABASE_URL` to browse/edit data.
+
+## Courses (certification tracker)
+
+The Courses section replicates a spreadsheet-based certification tracker (e.g. the Claude certification tracks):
+
+- **Structure** — a course has ordered **milestones** (name, phase like `PREREQUISITE`/`PREP COURSE`/`EXAM`, description, link, duration) and **participants** (enrolled employees).
+- **Tracker tab** — the matrix: participants as rows, milestones as columns (grouped by phase), each cell picks `Not started / 10%–90% / Completed`; summary columns show steps completed, % complete, "Currently at" (next step) and status. Participants can edit their own cells; HR Admins and Directors can edit anyone's.
+- **Org level** — each milestone shows the org-wide average progress and how many participants completed it; the course list shows overall org progress per course.
+- **Classes & attendance** — if the creator enables attendance for the course (some courses have recurring classes), they set the schedule note and generate recurring session dates (weekday pattern × weeks, or single dates). Admins mark anyone's attendance (Present/Absent/Excused); participants can mark themselves for today's session.
+
+The seed includes the two Claude certification tracks from the original tracker, with real course links and progress patterns.
 
 ## Project structure
 
 ```
-prisma/schema.prisma       # User, Attendance, Request, Approval, Otp, Connection, AuditLog
-prisma/seed.ts             # demo org: 1 Director, 1 HR, 4 employees + month of attendance
+prisma/schema.prisma       # User, Attendance, Request, Approval, Otp, Connection, AuditLog,
+                           # Course, Milestone, MilestoneProgress, CourseEnrollment, CourseSession, CourseAttendance
+prisma/seed.ts             # demo org: 1 Director, 1 HR, 4 employees + month of attendance + 2 certification courses
 src/middleware.ts          # session check, forced first-login reset, auth-page redirects
-src/lib/                   # db, auth (JWT/bcrypt/OTP), mail, audit, date/stats helpers
-src/app/api/               # auth, me, attendance, requests, users, approvals, dashboard, audit, connections
+src/lib/                   # db, auth (JWT/bcrypt/OTP), mail (Gmail SMTP), audit, date/stats helpers
+src/app/api/               # auth, me, attendance, requests, users, approvals, dashboard, audit, connections, courses
 src/app/(auth)/            # login, forgot-password, reset-password, change-password
-src/app/(app)/             # attendance, requests, dashboard, users, approvals, audit, connectors
+src/app/(app)/             # attendance, requests, courses, dashboard, users, approvals, audit, connectors
 src/components/            # app shell, month grid, combined stat bar, request dialog, ui/ (shadcn)
 ```
 

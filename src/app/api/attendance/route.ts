@@ -54,13 +54,11 @@ export async function POST(req: Request) {
         }
         throw new ApiError(409, "Attendance has already been marked for today.");
       }
-      // Late if marked after 09:30 server time.
-      const late = now.getHours() > 9 || (now.getHours() === 9 && now.getMinutes() > 30);
       const record = await prisma.attendance.create({
         data: {
           userId: user.id,
           date: today,
-          status: late ? "LATE" : "PRESENT",
+          status: "PRESENT",
           clockInAt: now,
           latitude: body.latitude ?? null,
           longitude: body.longitude ?? null,

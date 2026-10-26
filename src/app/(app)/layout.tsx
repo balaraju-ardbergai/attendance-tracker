@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BadgeCheck,
+  BookOpen,
   CalendarCheck,
   CalendarDays,
   ClipboardList,
@@ -33,6 +34,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { href: "/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/requests", label: "My Requests", icon: ClipboardList },
+  { href: "/courses", label: "Courses", icon: BookOpen },
   { href: "/dashboard", label: "Organization", icon: LayoutDashboard, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/users", label: "Users", icon: Users, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/approvals", label: "Approvals", icon: BadgeCheck, roles: ["DIRECTOR"] },

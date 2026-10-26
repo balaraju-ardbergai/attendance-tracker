@@ -18,7 +18,6 @@ import { ROLE_LABEL } from "@/lib/roles";
 type Stats = {
   workingDays: number;
   present: number;
-  late: number;
   leave: number;
   wfh: number;
   absent: number;
@@ -125,7 +124,7 @@ export default function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {data.employees.map((employee) => {
               const s = employee.stats;
-              const pct = s.workingDays > 0 ? Math.round(((s.present + s.late) / s.workingDays) * 100) : 0;
+              const pct = s.workingDays > 0 ? Math.round((s.present / s.workingDays) * 100) : 0;
               return (
                 <Card key={employee.id}>
                   <CardContent className="p-5">
@@ -154,7 +153,7 @@ export default function DashboardPage() {
                     <div className="mt-4 space-y-2">
                       <StatBar stats={s} />
                       <p className="text-xs text-muted-foreground">
-                        {s.present} present · {s.late} late · {s.leave} leave · {s.wfh} WFH · {s.absent} absent
+                        {s.present} present · {s.leave} leave · {s.wfh} WFH · {s.absent} absent
                       </p>
                     </div>
                   </CardContent>

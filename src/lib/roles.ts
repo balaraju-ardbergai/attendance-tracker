@@ -22,10 +22,21 @@ export const REQUEST_STATUS_LABEL: Record<string, string> = {
 
 export const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
   PRESENT: "Present",
-  LATE: "Late",
   LEAVE: "On Leave",
   WFH: "Work From Home",
   ABSENT: "Absent",
+};
+
+export const COURSE_ATTENDANCE_LABEL: Record<string, string> = {
+  PRESENT: "Present",
+  ABSENT: "Absent",
+  EXCUSED: "Excused",
+};
+
+export const COURSE_STATUS_LABEL: Record<string, string> = {
+  NOT_STARTED: "Not started",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
 };
 
 export const APPROVAL_TYPE_LABEL: Record<string, string> = {
@@ -54,12 +65,22 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   PASSWORD_RESET: "Reset their password",
   CONNECTOR_LINKED: "Connected an external service",
   CONNECTOR_UNLINKED: "Disconnected an external service",
+  COURSE_CREATED: "Created a course",
+  COURSE_UPDATED: "Updated a course",
+  COURSE_DELETED: "Deleted a course",
+  MILESTONE_ADDED: "Added a course milestone",
+  MILESTONE_UPDATED: "Updated a course milestone",
+  MILESTONE_DELETED: "Deleted a course milestone",
+  ENROLLED: "Enrolled a participant",
+  UNENROLLED: "Removed a participant",
+  PROGRESS_UPDATED: "Updated course progress",
+  SESSION_ADDED: "Added course sessions",
+  COURSE_ATTENDANCE_MARKED: "Marked course attendance",
 };
 
 // Status colors used by badges, the month grid and the combined stat bar.
 export const STATUS_TONE: Record<string, string> = {
   PRESENT: "bg-emerald-500",
-  LATE: "bg-amber-500",
   LEAVE: "bg-violet-500",
   WFH: "bg-sky-500",
   ABSENT: "bg-rose-500",

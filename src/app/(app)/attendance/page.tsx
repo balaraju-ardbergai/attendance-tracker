@@ -45,7 +45,6 @@ type AttendanceData = {
   stats: {
     workingDays: number;
     present: number;
-    late: number;
     leave: number;
     wfh: number;
     absent: number;
@@ -140,7 +139,7 @@ export default function AttendancePage() {
         <CardContent className="flex flex-wrap items-center gap-4">
           {todayRecord ? (
             <>
-              <Badge variant={todayRecord.status === "LATE" ? "secondary" : "default"}>
+              <Badge variant="default">
                 {ATTENDANCE_STATUS_LABEL[todayRecord.status]}
               </Badge>
               <div className="text-sm text-muted-foreground">
@@ -209,10 +208,9 @@ export default function AttendancePage() {
                 <>
                   <StatBar stats={stats} />
                   <StatLegend />
-                  <div className="grid grid-cols-5 gap-2 text-center">
+                  <div className="grid grid-cols-4 gap-2 text-center">
                     {[
                       ["Present", stats.present],
-                      ["Late", stats.late],
                       ["Leave", stats.leave],
                       ["WFH", stats.wfh],
                       ["Absent", stats.absent],

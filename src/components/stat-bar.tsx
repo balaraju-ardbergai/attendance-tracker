@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 
 export type StatCounts = {
   present: number;
-  late: number;
   leave: number;
   wfh: number;
   absent: number;
@@ -12,7 +11,6 @@ export type StatCounts = {
 
 const SEGMENTS: { key: keyof StatCounts; className: string; label: string }[] = [
   { key: "present", className: "bg-emerald-500", label: "Present" },
-  { key: "late", className: "bg-amber-500", label: "Late" },
   { key: "leave", className: "bg-violet-500", label: "Leave" },
   { key: "wfh", className: "bg-sky-500", label: "WFH" },
   { key: "absent", className: "bg-rose-500", label: "Absent" },

@@ -1,8 +1,9 @@
-// Seeds demo data: 1 Director, 1 HR Admin, 4 employees, plus current-month
-// attendance and a couple of leave/WFH requests so the dashboard is alive.
+// Seeds demo data: 1 Director, 1 HR Admin, 4 employees, current-month attendance,
+// two leave/WFH requests, and the Claude certification courses mirroring the
+// Claude_Certification_Tracker spreadsheet.
 // Run with: npm run db:seed   (requires a reachable DATABASE_URL)
 
-import { PrismaClient, AttendanceStatus, RequestStatus, RequestType, Role } from "@prisma/client";
+import { PrismaClient, AttendanceStatus, CourseAttendanceStatus, RequestStatus, RequestType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -26,6 +27,52 @@ const PEOPLE: {
   { email: "david@org.com", name: "David Lee", role: "EMPLOYEE", department: "Engineering", password: "Emp@12345" },
   { email: "anita@org.com", name: "Anita Rao", role: "EMPLOYEE", department: "Human Resources", password: "Emp@12345" },
 ];
+
+const SKILLJAR = "https://anthropic-partners.skilljar.com";
+
+// Milestones for "Claude Certified Developer - Foundations" (order matters).
+const DEVELOPER_MILESTONES: { name: string; phase: string; description?: string; durationMin?: number; link?: string }[] = [
+  { name: "Claude 101", phase: "PREREQUISITE", description: "Everyday work with Claude: core features, projects, artifacts and settings.", link: `${SKILLJAR}/claude-101` },
+  { name: "Claude Code 101", phase: "PREREQUISITE", description: "Use Claude Code effectively in your daily development work.", link: "https://anthropic.skilljar.com/claude-code-101" },
+  { name: "Claude Platform 101", phase: "PREREQUISITE", description: "Build on the Claude Platform from the ground up.", link: `${SKILLJAR}/page/all-courses` },
+  { name: "Claude Code in Action", phase: "PREREQUISITE", description: "Run long, hands-off Claude Code sessions: steer, configure and extend.", link: `${SKILLJAR}/claude-code-in-action` },
+  { name: "AI Fluency: Framework & Foundations", phase: "PREREQUISITE", description: "Collaborate with AI effectively, efficiently, ethically and safely.", link: `${SKILLJAR}/ai-fluency-framework-foundations` },
+  { name: "Building with the Claude API", phase: "PREREQUISITE", description: "Full spectrum of working with Anthropic models via the Claude API.", link: `${SKILLJAR}/claude-with-the-anthropic-api` },
+  { name: "Introduction to Model Context Protocol", phase: "PREREQUISITE", description: "Build MCP servers and clients in Python: tools, resources and prompts.", link: `${SKILLJAR}/introduction-to-model-context-protocol` },
+  { name: "Model Context Protocol: Advanced Topics", phase: "PREREQUISITE", description: "Sampling, notifications, file access, and transport mechanisms.", link: `${SKILLJAR}/model-context-protocol-advanced-topics` },
+  { name: "AI Capabilities and Limitations", phase: "PREREQUISITE", description: "Introductory course on how AI works.", link: "https://anthropic.skilljar.com/ai-capabilities-and-limitations" },
+  { name: "MSO Foundations", phase: "PREP COURSE", durationMin: 57, description: "Model fundamentals and technical foundations.", link: `${SKILLJAR}/path/claude-certified-developer-foundations/mso-foundations` },
+  { name: "Production-Grade Prompting, Agents & Tool Use", phase: "PREP COURSE", durationMin: 209, description: "Reliable prompts, tools, context management, agent loops.", link: `${SKILLJAR}/path/claude-certified-developer-foundations/production-grade-prompting-agents-tool-use` },
+  { name: "Claude Code, MCP & Integration", phase: "PREP COURSE", durationMin: 142, description: "Make an integration configurable, shareable, and safe.", link: `${SKILLJAR}/path/claude-certified-developer-foundations/claude-code-mcp-integration` },
+  { name: "Production Engineering, Evals & Security", phase: "PREP COURSE", durationMin: 211, description: "Prove an agent holds up under real production traffic.", link: `${SKILLJAR}/path/claude-certified-developer-foundations/production-engineering-evals-security` },
+  { name: "Accelerators & IP Contribution", phase: "PREP COURSE", durationMin: 155, description: "Package a build so it survives reuse, review, and deployment.", link: `${SKILLJAR}/path/claude-certified-developer-foundations/accelerators-ip-contribution` },
+  { name: "Claude Certified Developer - Foundations (Exam)", phase: "EXAM", description: "Exam details and registration on the certification page.", link: `${SKILLJAR}/claude-certified-developer-foundations-certification` },
+];
+
+const ARCHITECT_MILESTONES: { name: string; phase: string; description?: string; link?: string }[] = [
+  { name: "Claude 101", phase: "PREP COURSE", description: "Everyday work with Claude: core features, projects, artifacts and settings.", link: `${SKILLJAR}/claude-101` },
+  { name: "AI Fluency: Framework & Foundations", phase: "PREP COURSE", description: "Collaborate with AI effectively, efficiently, ethically and safely.", link: `${SKILLJAR}/ai-fluency-framework-foundations` },
+  { name: "Building with the Claude API", phase: "PREP COURSE", description: "Full spectrum of working with Anthropic models via the Claude API.", link: `${SKILLJAR}/claude-with-the-anthropic-api` },
+  { name: "Introduction to Model Context Protocol", phase: "PREP COURSE", description: "Build MCP servers and clients in Python: tools, resources and prompts.", link: `${SKILLJAR}/introduction-to-model-context-protocol` },
+  { name: "Claude Code in Action", phase: "PREP COURSE", description: "Run long, hands-off Claude Code sessions: steer, configure and extend.", link: `${SKILLJAR}/claude-code-in-action` },
+  { name: "Claude on Google Cloud", phase: "PREP COURSE", description: "Working with Anthropic models on Google Cloud.", link: `${SKILLJAR}/claude-with-google-vertex` },
+  { name: "Claude with Amazon Bedrock", phase: "PREP COURSE", description: "Anthropic's AWS accreditation training, open to all.", link: `${SKILLJAR}/claude-in-amazon-bedrock` },
+  { name: "Claude Certified Architect - Foundations (Exam)", phase: "EXAM", description: "Exam details and registration on the certification page.", link: `${SKILLJAR}/claude-certified-architect-foundations-certification` },
+];
+
+/** Last N Wednesdays before (and excluding) today, plus the next upcoming Wednesday. */
+function recentWednesdays(count: number): string[] {
+  const out: string[] = [];
+  const d = new Date();
+  while (out.length < count) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() === 3) out.push(keyOf(d));
+  }
+  const next = new Date();
+  next.setDate(next.getDate() + ((10 - next.getDay()) % 7 || 7));
+  out.push(keyOf(next));
+  return out;
+}
 
 async function main() {
   const now = new Date();
@@ -58,9 +105,12 @@ async function main() {
   await prisma.approval.deleteMany({});
   await prisma.auditLog.deleteMany({ where: { actorId: { in: ids } } });
   await prisma.connection.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.course.deleteMany({
+    where: { name: { in: ["Claude Certified Developer - Foundations", "Claude Certified Architect - Foundations"] } },
+  });
 
   // Per-user plan for believable month data.
-  const leaveStart = toKey(new Date(Date.UTC(year, month, 2))); // 2nd of month
+  const leaveStart = toKey(new Date(Date.UTC(year, month, 2)));
   const leaveEnd = toKey(new Date(Date.UTC(year, month, 4)));
   const fridays: string[] = [];
   for (let day = 1; day <= 31; day++) {
@@ -95,10 +145,10 @@ async function main() {
       } else if (key === todayKey && Math.random() < 0.4) {
         continue; // some people haven't marked today yet
       } else {
-        status = Math.random() < 0.08 ? "LATE" : "PRESENT";
+        status = "PRESENT";
       }
 
-      const inAt = new Date(`${key}T${status === "LATE" ? "09:47" : "09:0" + Math.floor(Math.random() * 9)}:00.000Z`);
+      const inAt = new Date(`${key}T09:0${Math.floor(Math.random() * 9)}:00.000Z`);
       const outAt = key === todayKey ? undefined : new Date(`${key}T17:${pad(30 + Math.floor(Math.random() * 20))}:00.000Z`);
       records.push({
         userId,
@@ -147,10 +197,115 @@ async function main() {
     },
   });
 
+  /* ------------------------------- Courses ------------------------------- */
+
+  async function createCourse(config: {
+    name: string;
+    description: string;
+    attendanceEnabled: boolean;
+    scheduleNote: string | null;
+    milestones: { name: string; phase: string; description?: string; durationMin?: number; link?: string }[];
+    progressByUser: Record<string, Record<number, number>>; // email -> {milestoneOrder: percent}
+  }) {
+    const course = await prisma.course.create({
+      data: {
+        name: config.name,
+        description: config.description,
+        startedOn: fromKey("2026-10-01"),
+        attendanceEnabled: config.attendanceEnabled,
+        scheduleNote: config.scheduleNote,
+        createdById: hrId,
+      },
+    });
+
+    const milestones = await prisma.$transaction(
+      config.milestones.map((m, i) =>
+        prisma.milestone.create({
+          data: {
+            courseId: course.id,
+            order: i + 1,
+            name: m.name,
+            phase: m.phase,
+            description: m.description ?? null,
+            link: m.link ?? null,
+            durationMin: m.durationMin ?? null,
+          },
+        }),
+      ),
+    );
+
+    for (const [email, progressMap] of Object.entries(config.progressByUser)) {
+      const userId = users[email];
+      await prisma.courseEnrollment.create({ data: { courseId: course.id, userId } });
+      const rows = Object.entries(progressMap).map(([order, percent]) => ({
+        milestoneId: milestones[Number(order) - 1].id,
+        userId,
+        percent,
+      }));
+      if (rows.length) await prisma.milestoneProgress.createMany({ data: rows });
+    }
+
+    return { course, milestones };
+  }
+
+  // Developer track — attendance enabled with weekly Wednesday classes.
+  const developer = await createCourse({
+    name: "Claude Certified Developer - Foundations",
+    description: "Prerequisites, the 5-course prep path and the certification exam. Track progress per person, exactly like the shared tracker sheet.",
+    attendanceEnabled: true,
+    scheduleNote: "Wed 16:00–17:00 IST",
+    milestones: DEVELOPER_MILESTONES,
+    progressByUser: {
+      "employee@org.com": { 1: 100, 2: 100, 5: 60 },
+      "sara@org.com": { 1: 100, 2: 60, 4: 100, 5: 20, 7: 100, 8: 100, 9: 100, 10: 100 },
+      "david@org.com": { 1: 100, 2: 100, 3: 100, 4: 100, 5: 100, 7: 100 },
+      "anita@org.com": { 1: 100, 2: 100, 3: 100, 4: 100, 5: 100, 6: 100, 7: 100, 8: 100 },
+      "hr@org.com": { 1: 100, 2: 100, 3: 100, 4: 100, 5: 70, 7: 30 },
+    },
+  });
+
+  await createCourse({
+    name: "Claude Certified Architect - Foundations",
+    description: "Seven prep courses (cloud platforms optional) leading to the Architect Foundations exam.",
+    attendanceEnabled: false,
+    scheduleNote: null,
+    milestones: ARCHITECT_MILESTONES,
+    progressByUser: {
+      "director@org.com": { 1: 100 },
+      "sara@org.com": { 1: 10 },
+      "david@org.com": { 1: 20 },
+    },
+  });
+
+  // Class sessions + attendance for the developer track.
+  const wednesdays = recentWednesdays(3);
+  for (let i = 0; i < wednesdays.length; i++) {
+    const isPast = wednesdays[i] <= todayKey;
+    const session = await prisma.courseSession.create({
+      data: {
+        courseId: developer.course.id,
+        date: fromKey(wednesdays[i]),
+        topic: isPast ? `Week ${i + 1} review` : "Prep course Q&A",
+      },
+    });
+    if (isPast) {
+      const attendees = Object.entries(users).filter(([email]) => email !== "director@org.com");
+      await prisma.courseAttendance.createMany({
+        data: attendees.map(([email, userId], idx) => ({
+          sessionId: session.id,
+          userId,
+          status: (email === "david@org.com" && idx === 2 ? "ABSENT" : "PRESENT") as CourseAttendanceStatus,
+          markedById: hrId,
+        })),
+      });
+    }
+  }
+
   console.log("\nSeed complete. Demo accounts:");
   for (const p of PEOPLE) {
     console.log(`  ${p.role.padEnd(9)} ${p.email.padEnd(20)} password: ${p.password}`);
   }
+  console.log("  Courses seeded: Claude Certified Developer - Foundations (with classes), Claude Certified Architect - Foundations");
   console.log("");
 }
 
