@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DIRECTOR
+  ADMIN
+  EMPLOYEE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  LEAVE
+  WFH
+  ABSENT
+}
+
+enum RequestType {
+  LEAVE
+  WFH
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalType {
+  USER_ADD
+  USER_REMOVE
+  USER_REACTIVATE
+  ASSIGN_HR
+  SET_EMPLOYEE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OtpPurpose {
+  PASSWORD_RESET
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  name              String
+  role              Role     @default(EMPLOYEE)
+  department        String?
+  pictureUrl        String?
+  passwordHash      String?
+  mustResetPassword Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  attendance         Attendance[]
+  requests           Request[]    @relation("Requester")
+  reviewedRequests   Request[]    @relation("Reviewer")
+  approvalsRequested Approval[]   @relation("ApprovalRequester")
+  approvalsReviewed  Approval[]   @relation("ApprovalReviewer")
+  otps               Otp[]
+  connections        Connection[]
+  auditActions       AuditLog[]   @relation("AuditActor")
+  auditTargets       AuditLog[]   @relation("AuditTarget")
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  userId     String
+  date       DateTime         @db.Date
+  status     AttendanceStatus @default(PRESENT)
+  clockInAt  DateTime?
+  clockOutAt DateTime?
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+model Request {
+  id           String        @id @default(cuid())
+  userId       String
+  type         RequestType
+  startDate    DateTime      @db.Date
+  endDate      DateTime      @db.Date
+  reason       String
+  status       RequestStatus @default(PENDING)
+  reviewNote   String?
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user       User  @relation("Requester", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("Reviewer", fields: [reviewedById], references: [id])
+
+  @@index([status])
+  @@index([userId])
+}
+
+model Approval {
+  id            String         @id @default(cuid())
+  type          ApprovalType
+  payload       Json
+  note          String?
+  status        ApprovalStatus @default(PENDING)
+  requestedById String
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  requestedBy User  @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  reviewedBy  User? @relation("ApprovalReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status])
+}
+
+model Otp {
+  id        String     @id @default(cuid())
+  userId    String
+  codeHash  String
+  purpose   OtpPurpose @default(PASSWORD_RESET)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Connection {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String
+  accountEmail String?
+  connectedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String
+  targetUserId String?
+  action       String
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  actor      User  @relation("AuditActor", fields: [actorId], references: [id])
+  targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id])
+
+  @@index([createdAt])
+}
