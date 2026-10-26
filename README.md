@@ -18,6 +18,10 @@ An organization attendance tracking application built with **Next.js (App Router
 | **Organization dashboard** | Summary cards + one card per employee (picture, name, email, role) with a combined progress bar of present/late/leave/WFH/absent for the current month |
 | **HR Activity (audit)** | Director-only trail of every administrative action (who, what, whom, when) |
 | **Connectors** | OAuth connections for Outlook (Microsoft Graph) and Gmail (Google), per user, with real token exchange — just add API keys |
+| **Expenses** | Every org expense: vendor/client billings, office purchases, event prize money, other. Categories, vendor/party, payment method, optional team attribution. Access restricted to Directors + HR, who can **grant access to anyone**. |
+| **Expense analytics & email reports** | Visual dashboards (weekly/monthly totals, 6-month trend, category and team splits) plus **scheduled weekly (Mon 09:00) and monthly (1st 09:00) email reports** via Vercel Cron. Directors configure who receives the emails. |
+| **Teams & Org Graph** | Teams with leads and members (Team Graph + Team Mgmt: create, add/remove members, set lead, per-team task and expense stats) and a company-wide **Org Graph** reporting tree driven by each person's manager. |
+| **Task & Progress Tracker** | Tasks with assignee, team, priority, due date, status and 0–100% progress. Assignees update their own status/progress; admins see all tasks and a per-person progress summary. |
 
 ## Quick start (local)
 
@@ -72,6 +76,7 @@ An organization attendance tracking application built with **Next.js (App Router
    | `DEV_EXPOSE_OTP` | **leave unset in production** |
    | `MS_CLIENT_ID` / `MS_CLIENT_SECRET` / `MS_TENANT_ID` | optional, Outlook connector |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional, Gmail connector |
+   | `CRON_SECRET` | optional but recommended on Vercel — protects the scheduled report endpoints (Vercel sends it as `Authorization: Bearer …`) |
 
    `prisma generate` runs automatically on install (`postinstall` script).
 
@@ -112,6 +117,16 @@ The Courses section replicates a spreadsheet-based certification tracker (e.g. t
 - **Classes & attendance** — if the creator enables attendance for the course (some courses have recurring classes), they set the schedule note and generate recurring session dates (weekday pattern × weeks, or single dates). Admins mark anyone's attendance (Present/Absent/Excused); participants can mark themselves for today's session.
 
 The seed includes the two Claude certification tracks from the original tracker, with real course links and progress patterns.
+
+## Expenses, teams & tasks
+
+- **Access model** — Expenses are visible to Directors and HR Admins by default; they can grant/revoke access to any user from the Users page ("Grant expense access"). Directors configure the **report recipients** on the Expenses → Reports tab; subscribed people also get Expenses access.
+- **Email reports** — `vercel.json` defines two crons hitting `/api/reports/expense/weekly` (Mondays 09:00) and `/api/reports/expense/monthly` (1st 09:00). The weekly report covers the last completed Mon–Sun week; the monthly report covers the previous calendar month. Set `CRON_SECRET` in Vercel so only Vercel can trigger them. Both can also be sent manually from the Expenses page ("Send … report now").
+- **Expenses point at teams** — an expense can be attributed to a Team, powering the per-team spend charts and team pages.
+- **Org Graph** — each person's manager is set from the Users page ("Set manager…"); the Org Graph renders the reporting tree. Manager assignment is admin/director only.
+- **Important:** `prisma db push` syncs the *entire* database it points at. The app therefore uses its own dedicated `attendance` database — don't point `DATABASE_URL` at a database shared with other applications.
+
+## Database layout note
 
 ## Project structure
 

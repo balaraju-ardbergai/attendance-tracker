@@ -11,6 +11,7 @@ export type AppUser = {
   department: string | null;
   pictureUrl: string | null;
   mustResetPassword: boolean;
+  expenseAccess: boolean;
 };
 
 export const UserContext = createContext<AppUser | null>(null);

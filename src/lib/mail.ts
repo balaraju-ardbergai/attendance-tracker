@@ -158,3 +158,50 @@ export function approvalOutcomeEmail(
     ),
   };
 }
+
+export function expenseReportEmail(
+  recipientName: string,
+  recipientEmail: string,
+  periodLabel: string,
+  summary: { total: number; count: number },
+  byCategory: { label: string; total: number }[],
+  byTeam: { label: string; total: number }[],
+  topExpenses: { title: string; category: string; party: string | null; amount: number; date: string }[],
+) {
+  const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  const rows = (items: { label: string; value: string }[]) =>
+    items.length === 0
+      ? `<tr><td colspan="2" style="padding:6px;color:#71717a;">None recorded.</td></tr>`
+      : items
+          .map(
+            (r) =>
+              `<tr><td style="padding:6px;border-bottom:1px solid #e4e4e7;">${escapeHtml(r.label)}</td><td style="padding:6px;border-bottom:1px solid #e4e4e7;text-align:right;font-weight:600;">${r.value}</td></tr>`,
+          )
+          .join("");
+  const table = (title: string, body: string) =>
+    `<h3 style="margin:20px 0 8px;font-size:14px;color:#18181b;">${escapeHtml(title)}</h3>
+     <table style="width:100%;border-collapse:collapse;font-size:13px;">${body}</table>`;
+
+  return {
+    to: recipientEmail,
+    subject: `Expense report — ${periodLabel}`,
+    html: wrap(
+      `Expense report — ${escapeHtml(periodLabel)}`,
+      `<p>Hi ${escapeHtml(recipientName)},</p>
+       <p>Here is the expense summary for <b>${escapeHtml(periodLabel)}</b>: <b>${fmt(summary.total)}</b> across ${summary.count} expense${summary.count === 1 ? "" : "s"}.</p>
+       ${table("By category", rows(byCategory.map((c) => ({ label: c.label, value: fmt(c.total) }))))}
+       ${table("By team", rows(byTeam.map((t) => ({ label: t.label, value: fmt(t.total) }))))}
+       ${table(
+         "Largest expenses",
+         rows(topExpenses.map((e) => ({ label: `${e.title}${e.party ? ` (${e.party})` : ""} — ${formatDate(e.date)}`, value: fmt(e.amount) }))),
+       )}
+       <p style="margin-top:20px;"><a href="${appUrl("/expenses")}">Open the Expenses dashboard</a></p>`,
+    ),
+  };
+}
+
+function formatDate(key: string) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [y, m, d] = key.split("-").map(Number);
+  return `${d} ${months[m - 1]} ${y}`;
+}

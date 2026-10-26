@@ -11,9 +11,13 @@ import {
   ClipboardList,
   History,
   LayoutDashboard,
+  ListTodo,
   LogOut,
+  Network,
   Plug,
   Users,
+  Users2,
+  Wallet,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -29,12 +33,17 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: AppUser["role"][];
+  needsExpenseAccess?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/requests", label: "My Requests", icon: ClipboardList },
+  { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/courses", label: "Courses", icon: BookOpen },
+  { href: "/teams", label: "Teams", icon: Users2 },
+  { href: "/org-graph", label: "Org Graph", icon: Network },
+  { href: "/expenses", label: "Expenses", icon: Wallet, needsExpenseAccess: true },
   { href: "/dashboard", label: "Organization", icon: LayoutDashboard, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/users", label: "Users", icon: Users, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/approvals", label: "Approvals", icon: BadgeCheck, roles: ["DIRECTOR"] },
@@ -89,7 +98,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const items = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user.role));
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      (!item.roles || item.roles.includes(user.role)) &&
+      (!item.needsExpenseAccess ||
+        user.role === "ADMIN" ||
+        user.role === "DIRECTOR" ||
+        user.expenseAccess),
+  );
 
   const navLinks = (onNavigate?: () => void) =>
     items.map((item) => {

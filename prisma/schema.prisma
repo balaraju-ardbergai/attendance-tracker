@@ -56,6 +56,26 @@ enum OtpPurpose {
   PASSWORD_RESET
 }
 
+enum ExpenseCategory {
+  VENDOR_BILLING
+  CLIENT_BILLING
+  OFFICE_PURCHASE
+  EVENT_PRIZE
+  OTHER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 model User {
   id                String   @id @default(cuid())
   email             String   @unique
@@ -66,8 +86,14 @@ model User {
   passwordHash      String?
   mustResetPassword Boolean  @default(false)
   isActive          Boolean  @default(true)
+  managerId         String?
+  expenseAccess         Boolean @default(false)
+  receivesExpenseReports Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  manager            User?  @relation("OrgManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports            User[] @relation("OrgManager")
 
   attendance         Attendance[]
   requests           Request[]    @relation("Requester")
@@ -82,6 +108,12 @@ model User {
   courseEnrollments  CourseEnrollment[]
   milestoneProgress  MilestoneProgress[]
   courseAttendances  CourseAttendance[]
+  expensesCreated    Expense[]  @relation("ExpenseCreator")
+  teamMemberships    TeamMember[]
+  teamsLed           Team[]     @relation("TeamLead")
+  teamsCreated       Team[]     @relation("TeamCreator")
+  tasksAssigned      Task[]     @relation("TaskAssignee")
+  tasksCreated       Task[]     @relation("TaskCreator")
 }
 
 model Attendance {
@@ -263,4 +295,76 @@ model CourseAttendance {
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, userId])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  leadId      String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead     User?        @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
+  creator  User         @relation("TeamCreator", fields: [createdById], references: [id])
+  members  TeamMember[]
+  expenses Expense[]
+  tasks    Task[]
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model Expense {
+  id            String          @id @default(cuid())
+  title         String
+  description   String?
+  category      ExpenseCategory
+  party         String?
+  amount        Float
+  date          DateTime        @db.Date
+  teamId        String?
+  paymentMethod String?
+  receiptUrl    String?
+  createdById   String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  team    Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  creator User  @relation("ExpenseCreator", fields: [createdById], references: [id])
+
+  @@index([date])
+  @@index([category])
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  progress    Int          @default(0)
+  assigneeId  String?
+  teamId      String?
+  dueDate     DateTime?    @db.Date
+  createdById String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  assignee User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  team     Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  creator  User  @relation("TaskCreator", fields: [createdById], references: [id])
+
+  @@index([assigneeId])
+  @@index([status])
 }

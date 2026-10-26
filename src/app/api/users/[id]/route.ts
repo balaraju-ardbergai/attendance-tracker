@@ -3,7 +3,17 @@ import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/ap
 import { AUDIT, logAudit } from "@/lib/audit";
 import { approvalRequestedEmail, sendMail } from "@/lib/mail";
 
-type Action = "UPDATE" | "DEACTIVATE" | "REACTIVATE" | "ASSIGN_HR" | "SET_EMPLOYEE";
+type Action =
+  | "UPDATE"
+  | "DEACTIVATE"
+  | "REACTIVATE"
+  | "ASSIGN_HR"
+  | "SET_EMPLOYEE"
+  | "SET_MANAGER"
+  | "GRANT_EXPENSE"
+  | "REVOKE_EXPENSE"
+  | "SUBSCRIBE_REPORTS"
+  | "UNSUBSCRIBE_REPORTS";
 
 // Major changes requested by HR Admins are routed to a Director via an Approval;
 // Directors apply them directly.
@@ -16,6 +26,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       name?: string;
       department?: string;
       pictureUrl?: string;
+      managerId?: string | null;
     }>(req);
 
     const target = await prisma.user.findUnique({ where: { id } });
@@ -94,6 +105,44 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           return ok({ message: `${target.name} is now a regular employee.` });
         }
         return submitApproval("SET_EMPLOYEE", `change ${target.name} (${target.email}) back to Employee`);
+      }
+      case "SET_MANAGER": {
+        if (body.managerId === null || body.managerId === "") {
+          await prisma.user.update({ where: { id }, data: { managerId: null } });
+          await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.MANAGER_SET, details: { email: target.email, manager: null } });
+          return ok({ message: `${target.name} has no manager assigned.` });
+        }
+        const manager = await prisma.user.findUnique({ where: { id: body.managerId! } });
+        if (!manager || !manager.isActive) throw new ApiError(400, "Manager not found or inactive.");
+        if (manager.id === target.id) throw new ApiError(400, "A person cannot be their own manager.");
+        await prisma.user.update({ where: { id }, data: { managerId: manager.id } });
+        await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.MANAGER_SET, details: { email: target.email, manager: manager.name } });
+        return ok({ message: `${manager.name} is now ${target.name}'s manager.` });
+      }
+      case "GRANT_EXPENSE": {
+        if (target.expenseAccess) throw new ApiError(409, "Already has expense access.");
+        await prisma.user.update({ where: { id }, data: { expenseAccess: true } });
+        await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.EXPENSE_ACCESS_GRANTED, details: { email: target.email } });
+        return ok({ message: `${target.name} can now access Expenses.` });
+      }
+      case "REVOKE_EXPENSE": {
+        if (!target.expenseAccess) throw new ApiError(409, "Does not have expense access.");
+        await prisma.user.update({ where: { id }, data: { expenseAccess: false, receivesExpenseReports: false } });
+        await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.EXPENSE_ACCESS_REVOKED, details: { email: target.email } });
+        return ok({ message: `Expense access revoked for ${target.name}.` });
+      }
+      case "SUBSCRIBE_REPORTS": {
+        if (!isDirector) throw new ApiError(403, "Only Directors can configure report recipients.");
+        if (!target.isActive) throw new ApiError(400, "Inactive users cannot receive reports.");
+        await prisma.user.update({ where: { id }, data: { expenseAccess: true, receivesExpenseReports: true } });
+        await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.REPORT_RECIPIENT_UPDATED, details: { email: target.email, subscribed: true } });
+        return ok({ message: `${target.name} will receive expense reports.` });
+      }
+      case "UNSUBSCRIBE_REPORTS": {
+        if (!isDirector) throw new ApiError(403, "Only Directors can configure report recipients.");
+        await prisma.user.update({ where: { id }, data: { receivesExpenseReports: false } });
+        await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.REPORT_RECIPIENT_UPDATED, details: { email: target.email, subscribed: false } });
+        return ok({ message: `${target.name} will no longer receive expense reports.` });
       }
       default:
         throw new ApiError(400, "Unknown action.");

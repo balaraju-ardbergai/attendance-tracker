@@ -57,3 +57,12 @@ export async function requireActiveUser(roles?: AppRole[]) {
   if (!user || !user.isActive) throw new ApiError(401, "Your account is no longer active.");
   return { session, user };
 }
+
+// Expenses are for Directors/HR by default; Directors/HR can grant access to anyone.
+export async function requireExpenseAccess() {
+  const { session, user } = await requireActiveUser();
+  if (session.role !== "DIRECTOR" && session.role !== "ADMIN" && !user.expenseAccess) {
+    throw new ApiError(403, "You do not have access to Expenses.");
+  }
+  return { session, user };
+}

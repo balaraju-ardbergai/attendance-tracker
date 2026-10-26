@@ -39,6 +39,26 @@ export const COURSE_STATUS_LABEL: Record<string, string> = {
   COMPLETED: "Completed",
 };
 
+export const EXPENSE_CATEGORY_LABEL: Record<string, string> = {
+  VENDOR_BILLING: "Vendor Billing",
+  CLIENT_BILLING: "Client Billing",
+  OFFICE_PURCHASE: "Office Purchase",
+  EVENT_PRIZE: "Event / Prize Money",
+  OTHER: "Other",
+};
+
+export const TASK_STATUS_LABEL: Record<string, string> = {
+  TODO: "To do",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+};
+
+export const TASK_PRIORITY_LABEL: Record<string, string> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+};
+
 export const APPROVAL_TYPE_LABEL: Record<string, string> = {
   USER_ADD: "Add new user",
   USER_REMOVE: "Remove user",
@@ -76,6 +96,22 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   PROGRESS_UPDATED: "Updated course progress",
   SESSION_ADDED: "Added course sessions",
   COURSE_ATTENDANCE_MARKED: "Marked course attendance",
+  EXPENSE_CREATED: "Recorded an expense",
+  EXPENSE_UPDATED: "Updated an expense",
+  EXPENSE_DELETED: "Deleted an expense",
+  EXPENSE_ACCESS_GRANTED: "Granted expense access",
+  EXPENSE_ACCESS_REVOKED: "Revoked expense access",
+  REPORT_SENT: "Sent an expense report",
+  REPORT_RECIPIENT_UPDATED: "Updated report recipients",
+  TEAM_CREATED: "Created a team",
+  TEAM_UPDATED: "Updated a team",
+  TEAM_DELETED: "Deleted a team",
+  TEAM_MEMBER_ADDED: "Added a team member",
+  TEAM_MEMBER_REMOVED: "Removed a team member",
+  MANAGER_SET: "Assigned a manager",
+  TASK_CREATED: "Created a task",
+  TASK_UPDATED: "Updated a task",
+  TASK_DELETED: "Deleted a task",
 };
 
 // Status colors used by badges, the month grid and the combined stat bar.

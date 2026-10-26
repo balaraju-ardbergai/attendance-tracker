@@ -19,6 +19,7 @@ export async function GET() {
         department: user.department,
         pictureUrl: user.pictureUrl,
         mustResetPassword: user.mustResetPassword,
+        expenseAccess: user.role === "DIRECTOR" || user.role === "ADMIN" || user.expenseAccess,
       },
     });
   });

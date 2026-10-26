@@ -99,6 +99,13 @@ async function main() {
   }
   const ids = Object.values(users);
 
+  // Org structure: everyone reports to the HR Admin, HR reports to the Director.
+  await prisma.user.update({ where: { id: users["hr@org.com"] }, data: { managerId: users["director@org.com"], receivesExpenseReports: true } });
+  await prisma.user.update({ where: { id: users["director@org.com"] }, data: { managerId: null, receivesExpenseReports: true } });
+  for (const email of ["employee@org.com", "sara@org.com", "david@org.com", "anita@org.com"]) {
+    await prisma.user.update({ where: { id: users[email] }, data: { managerId: users["hr@org.com"], expenseAccess: false, receivesExpenseReports: false } });
+  }
+
   // Clean previous demo activity for idempotent re-seeding.
   await prisma.request.deleteMany({ where: { userId: { in: ids } } });
   await prisma.attendance.deleteMany({ where: { userId: { in: ids } } });
@@ -108,6 +115,9 @@ async function main() {
   await prisma.course.deleteMany({
     where: { name: { in: ["Claude Certified Developer - Foundations", "Claude Certified Architect - Foundations"] } },
   });
+  await prisma.expense.deleteMany({ where: { createdById: { in: ids } } });
+  await prisma.task.deleteMany({ where: { createdById: { in: ids } } });
+  await prisma.team.deleteMany({ where: { createdById: { in: ids } } });
 
   // Per-user plan for believable month data.
   const leaveStart = toKey(new Date(Date.UTC(year, month, 2)));
@@ -300,6 +310,71 @@ async function main() {
       });
     }
   }
+
+  /* --------------------------- Teams & Expenses --------------------------- */
+
+  const engineering = await prisma.team.create({
+    data: {
+      name: "Engineering",
+      description: "Product development and platform work.",
+      leadId: users["david@org.com"],
+      createdById: hrId,
+    },
+  });
+  const marketing = await prisma.team.create({
+    data: {
+      name: "Marketing",
+      description: "Brand, content and campaigns.",
+      leadId: users["sara@org.com"],
+      createdById: hrId,
+    },
+  });
+  await prisma.teamMember.createMany({
+    data: [
+      { teamId: engineering.id, userId: users["david@org.com"] },
+      { teamId: engineering.id, userId: users["employee@org.com"] },
+      { teamId: marketing.id, userId: users["sara@org.com"] },
+    ],
+  });
+
+  const monthAgo = (n: number) => {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - n);
+    d.setDate(Math.min(5 + Math.floor(Math.random() * 20), 28));
+    return fromKey(keyOf(d));
+  };
+
+  await prisma.expense.createMany({
+    data: [
+      { title: "AWS infrastructure bill", category: "VENDOR_BILLING", party: "Amazon Web Services", amount: 42850, date: monthAgo(2), teamId: engineering.id, paymentMethod: "Bank transfer", createdById: hrId },
+      { title: "Figma organization plan", category: "VENDOR_BILLING", party: "Figma", amount: 9600, date: monthAgo(1), teamId: engineering.id, paymentMethod: "Card", createdById: hrId },
+      { title: "Office internet — October", category: "VENDOR_BILLING", party: "ACT Fibernet", amount: 5999, date: fromKey(todayKey), paymentMethod: "UPI", createdById: hrId },
+      { title: "Client workshop catering", category: "CLIENT_BILLING", party: "Meridian Foods", amount: 12400, date: monthAgo(1), teamId: marketing.id, paymentMethod: "Card", createdById: hrId },
+      { title: "Client-site travel reimbursement", category: "CLIENT_BILLING", party: "Rahul Verma", amount: 6750, date: monthAgo(0), teamId: engineering.id, paymentMethod: "UPI", createdById: hrId },
+      { title: "4× monitors for new workstations", category: "OFFICE_PURCHASE", party: "Amazon Business", amount: 54800, date: monthAgo(2), teamId: engineering.id, paymentMethod: "Card", createdById: hrId },
+      { title: "Keyboards & mice refresh", category: "OFFICE_PURCHASE", party: "Logitech", amount: 14300, date: monthAgo(1), teamId: engineering.id, paymentMethod: "Card", createdById: hrId },
+      { title: "Pantry & coffee supplies", category: "OFFICE_PURCHASE", party: "Metro Cash & Carry", amount: 7200, date: fromKey(todayKey), paymentMethod: "UPI", createdById: hrId },
+      { title: "Hackathon — 1st prize", category: "EVENT_PRIZE", party: "Team Neural Ninjas", amount: 25000, date: monthAgo(1), paymentMethod: "Bank transfer", createdById: hrId },
+      { title: "Hackathon — 2nd prize", category: "EVENT_PRIZE", party: "Team Prompt Engineers", amount: 15000, date: monthAgo(1), paymentMethod: "Bank transfer", createdById: hrId },
+      { title: "Hackathon — 3rd prize", category: "EVENT_PRIZE", party: "Team Cache Money", amount: 10000, date: monthAgo(1), paymentMethod: "Bank transfer", createdById: hrId },
+      { title: "Hackathon jerseys & swag", category: "EVENT_PRIZE", party: "Printo", amount: 8450, date: monthAgo(1), paymentMethod: "UPI", createdById: hrId },
+      { title: "Team lunch — quarterly offsite", category: "OTHER", party: "Barbeque Nation", amount: 18600, date: monthAgo(0), paymentMethod: "Card", createdById: hrId },
+      { title: "Housekeeping services", category: "OTHER", party: "CleanScape", amount: 5400, date: monthAgo(2), paymentMethod: "UPI", createdById: hrId },
+    ],
+  });
+
+  await prisma.task.createMany({
+    data: [
+      { title: "Migrate staging to the new Postgres cluster", status: "IN_PROGRESS", priority: "HIGH", progress: 60, assigneeId: users["employee@org.com"], teamId: engineering.id, dueDate: fromKey(toKey(new Date(now.getTime() + 5 * 86400_000))), createdById: hrId },
+      { title: "Ship attendance export to CSV", status: "TODO", priority: "MEDIUM", progress: 0, assigneeId: users["david@org.com"], teamId: engineering.id, dueDate: fromKey(toKey(new Date(now.getTime() + 10 * 86400_000))), createdById: hrId },
+      { title: "Quarterly expense reconciliation", status: "IN_PROGRESS", priority: "HIGH", progress: 40, assigneeId: users["anita@org.com"], dueDate: fromKey(toKey(new Date(now.getTime() + 7 * 86400_000))), createdById: hrId },
+      { title: "Draft the hackathon retrospective post", status: "COMPLETED", priority: "LOW", progress: 100, assigneeId: users["sara@org.com"], teamId: marketing.id, createdById: hrId },
+      { title: "Plan November content calendar", status: "TODO", priority: "MEDIUM", progress: 0, assigneeId: users["sara@org.com"], teamId: marketing.id, dueDate: fromKey(toKey(new Date(now.getTime() + 4 * 86400_000))), createdById: hrId },
+      { title: "Onboard the next certification batch", status: "IN_PROGRESS", priority: "MEDIUM", progress: 30, assigneeId: users["anita@org.com"], createdById: hrId },
+      { title: "Review pending HR approvals", status: "COMPLETED", priority: "HIGH", progress: 100, assigneeId: users["hr@org.com"], createdById: users["director@org.com"] },
+      { title: "Set up the devices lab inventory sheet", status: "TODO", priority: "LOW", progress: 0, assigneeId: users["david@org.com"], teamId: engineering.id, createdById: hrId },
+    ],
+  });
 
   console.log("\nSeed complete. Demo accounts:");
   for (const p of PEOPLE) {

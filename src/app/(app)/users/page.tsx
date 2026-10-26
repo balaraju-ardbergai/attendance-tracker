@@ -53,6 +53,9 @@ type UserDto = {
   pictureUrl: string | null;
   isActive: boolean;
   createdAt: string;
+  managerId: string | null;
+  expenseAccess: boolean;
+  receivesExpenseReports: boolean;
 };
 
 export default function UsersPage() {
@@ -63,6 +66,8 @@ export default function UsersPage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<UserDto | null>(null);
+  const [managerTarget, setManagerTarget] = useState<UserDto | null>(null);
+  const [managerId, setManagerId] = useState("NONE");
   const [created, setCreated] = useState<{ name: string; tempPassword: string } | null>(null);
 
   const [name, setName] = useState("");
@@ -154,6 +159,25 @@ export default function UsersPage() {
     }
   }
 
+  async function saveManager(e: React.FormEvent) {
+    e.preventDefault();
+    if (!managerTarget) return;
+    setSubmitting(true);
+    try {
+      const data = await api<{ message: string }>(`/api/users/${managerTarget.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "SET_MANAGER", managerId: managerId === "NONE" ? null : managerId }),
+      });
+      toast.success(data.message);
+      setManagerTarget(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not set the manager.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -221,7 +245,14 @@ export default function UsersPage() {
                       {ROLE_LABEL[u.role]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="hidden text-sm md:table-cell">{u.department ?? "—"}</TableCell>
+                  <TableCell className="hidden text-sm md:table-cell">
+                    {u.department ?? "—"}
+                    {u.managerId && (
+                      <span className="block text-xs text-muted-foreground">
+                        Manager: {users.find((x) => x.id === u.managerId)?.name ?? "—"}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={u.isActive ? "border-emerald-500/50 text-emerald-600" : "text-muted-foreground"}>
                       {u.isActive ? "Active" : "Inactive"}
@@ -256,6 +287,26 @@ export default function UsersPage() {
                           {u.role === "ADMIN" && (
                             <DropdownMenuItem onClick={() => patchUser(u.id, "SET_EMPLOYEE")}>
                               {isDirector ? "Change to Employee" : "Request role change"}
+                            </DropdownMenuItem>
+                          )}
+                          {u.isActive && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setManagerTarget(u);
+                                setManagerId(u.managerId ?? "NONE");
+                              }}
+                            >
+                              Set manager…
+                            </DropdownMenuItem>
+                          )}
+                          {u.isActive && !u.expenseAccess && (
+                            <DropdownMenuItem onClick={() => patchUser(u.id, "GRANT_EXPENSE")}>
+                              Grant expense access
+                            </DropdownMenuItem>
+                          )}
+                          {u.expenseAccess && (
+                            <DropdownMenuItem onClick={() => patchUser(u.id, "REVOKE_EXPENSE")}>
+                              Revoke expense access
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
@@ -396,6 +447,44 @@ export default function UsersPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set manager dialog */}
+      <Dialog open={managerTarget !== null} onOpenChange={(open) => !open && setManagerTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set manager</DialogTitle>
+            <DialogDescription>{managerTarget?.email} — shown in the Org Graph.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveManager} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Reports to</Label>
+              <Select value={managerId} onValueChange={setManagerId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No manager</SelectItem>
+                  {users
+                    .filter((x) => x.isActive && x.id !== managerTarget?.id)
+                    .map((x) => (
+                      <SelectItem key={x.id} value={x.id}>
+                        {x.name} ({ROLE_LABEL[x.role]})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setManagerTarget(null)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={submitting}>

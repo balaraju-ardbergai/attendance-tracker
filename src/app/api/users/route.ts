@@ -14,6 +14,7 @@ export async function GET() {
       select: {
         id: true, name: true, email: true, role: true, department: true,
         pictureUrl: true, isActive: true, createdAt: true,
+        managerId: true, expenseAccess: true, receivesExpenseReports: true,
       },
     });
     return ok({ users });
