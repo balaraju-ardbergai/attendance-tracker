@@ -228,11 +228,12 @@ export default function TeamDetailPage() {
               </div>
             ))}
             <Button asChild variant="ghost" size="sm" className="w-full">
-              <Link href="/tasks">Open task tracker →</Link>
+              <Link href="/projects">Open projects →</Link>
             </Button>
           </CardContent>
         </Card>
 
+        {(canManage || me?.expenseAccess) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Recent team expenses</CardTitle>
@@ -253,6 +254,7 @@ export default function TeamDetailPage() {
             </Button>
           </CardContent>
         </Card>
+        )}
       </div>
 
       {canManage && (

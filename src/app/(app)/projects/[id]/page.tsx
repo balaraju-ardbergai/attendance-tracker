@@ -83,6 +83,9 @@ export default function ProjectWorkspacePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<Issue | null>(null);
   const [editProject, setEditProject] = useState(false);
+  const [boardScope, setBoardScope] = useState<string>("active");
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -113,14 +116,38 @@ export default function ProjectWorkspacePage() {
   const workItems = issues.filter((i) => i.type !== "EPIC");
   const activeSprint = sprints.find((s) => s.status === "ACTIVE");
   const isScrum = project.methodology === "SCRUM";
+  const boardIssues =
+    isScrum && boardScope !== "all"
+      ? workItems.filter((i) => i.sprintId === (boardScope === "active" ? activeSprint?.id : boardScope))
+      : workItems;
 
   async function patchIssue(id: string, body: Record<string, unknown>, refresh = true) {
     try {
       await api(`/api/issues/${id}`, { method: "PATCH", body: JSON.stringify(body) });
       if (refresh) await load();
+      return true;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update the issue.");
+      return false;
     }
+  }
+
+  async function moveIssue(id: string, status: string) {
+    const issue = issues.find((i) => i.id === id);
+    if (!issue || issue.status === status) return;
+    const canDrag = canManage || issue.assignee?.id === me?.id;
+    if (!canDrag) {
+      toast.error("Only the assignee, the project lead, its team lead, HR or Directors can move this issue.");
+      return;
+    }
+    // Optimistic update — the server keeps status/progress coherent.
+    setData((prev) =>
+      prev
+        ? { ...prev, issues: prev.issues.map((i) => (i.id === id ? { ...i, status, progress: status === "COMPLETED" ? 100 : i.progress } : i)) }
+        : prev,
+    );
+    const ok = await patchIssue(id, { status }, false);
+    if (ok) await load();
   }
 
   async function deleteIssue(issue: Issue) {
@@ -232,8 +259,28 @@ export default function ProjectWorkspacePage() {
         </TabsContent>
 
         {/* ------------------------------- BOARD ------------------------------- */}
-        <TabsContent value="board" className="mt-4">
-          {isScrum && !activeSprint ? (
+        <TabsContent value="board" className="mt-4 space-y-3">
+          {isScrum && (
+            <div className="flex items-center gap-2">
+              <Select value={boardScope} onValueChange={setBoardScope}>
+                <SelectTrigger className="w-52"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active" disabled={!activeSprint}>
+                    {activeSprint ? `Active: ${activeSprint.name}` : "No active sprint"}
+                  </SelectItem>
+                  {sprints.filter((s) => s.id !== activeSprint?.id).map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({s.status})</SelectItem>
+                  ))}
+                  <SelectItem value="all">All issues</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Drag cards between columns to change status.</p>
+            </div>
+          )}
+          {!isScrum && (
+            <p className="text-xs text-muted-foreground">Drag cards between columns to change status.</p>
+          )}
+          {isScrum && boardScope === "active" && !activeSprint ? (
             <Card>
               <CardContent className="py-10 text-center text-sm text-muted-foreground">
                 No active sprint. Start one from the Sprints tab{canManage ? "" : " (your lead or HR can)"}.
@@ -242,37 +289,75 @@ export default function ProjectWorkspacePage() {
           ) : (
             <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
               {STATUSES.map((status) => {
-                const columnIssues = (isScrum ? workItems.filter((i) => i.sprintId === activeSprint?.id) : workItems).filter((i) => i.status === status);
+                const columnIssues = boardIssues.filter((i) => i.status === status);
+                const canDrop = boardIssues.length > 0;
                 return (
-                  <Card key={status} className="bg-muted/30">
+                  <Card
+                    key={status}
+                    className={cn(
+                      "bg-muted/30 transition-colors",
+                      dragOverColumn === status && canDrop && "border-primary bg-accent/60 ring-2 ring-primary/30",
+                    )}
+                    onDragOver={(e) => {
+                      if (!canDrop) return;
+                      e.preventDefault();
+                      setDragOverColumn(status);
+                    }}
+                    onDragLeave={() => setDragOverColumn((prev) => (prev === status ? null : prev))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDragOverColumn(null);
+                      const id = e.dataTransfer.getData("text/plain");
+                      if (id) void moveIssue(id, status);
+                    }}
+                  >
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {TASK_STATUS_LABEL[status]}
                         <span>{columnIssues.length}</span>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
-                      {columnIssues.map((i) => (
-                        <button key={i.id} className="w-full rounded-lg border bg-card p-2.5 text-left transition-shadow hover:shadow-md" onClick={() => setDetail(i)}>
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-mono text-[10px] text-muted-foreground">{i.key}</span>
-                            {i.storyPoints != null && <Badge variant="secondary" className="px-1.5 text-[10px]">{i.storyPoints} pts</Badge>}
-                          </div>
-                          <p className="mt-0.5 line-clamp-2 text-sm font-medium">{i.title}</p>
-                          <div className="mt-2 flex items-center justify-between">
-                            {i.assignee ? (
-                              <Avatar className="h-5 w-5">
-                                {i.assignee.pictureUrl && <AvatarImage src={i.assignee.pictureUrl} alt={i.assignee.name} />}
-                                <AvatarFallback className="text-[8px]">{initials(i.assignee.name)}</AvatarFallback>
-                              </Avatar>
-                            ) : <span className="text-[10px] text-muted-foreground">Unassigned</span>}
-                            <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
-                              <div className="h-full rounded-full bg-sky-500" style={{ width: `${i.progress}%` }} />
+                    <CardContent className="min-h-24 space-y-2">
+                      {columnIssues.map((i) => {
+                        const canDrag = canManage || i.assignee?.id === me?.id;
+                        return (
+                          <div
+                            key={i.id}
+                            draggable={canDrag}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", i.id);
+                              e.dataTransfer.effectAllowed = "move";
+                              setDraggingId(i.id);
+                            }}
+                            onDragEnd={() => setDraggingId(null)}
+                            onClick={() => setDetail(i)}
+                            className={cn(
+                              "w-full cursor-pointer rounded-lg border bg-card p-2.5 text-left transition-shadow hover:shadow-md",
+                              canDrag ? "cursor-grab active:cursor-grabbing" : "opacity-80",
+                              draggingId === i.id && "opacity-40",
+                            )}
+                            title={canDrag ? "Drag to change status" : undefined}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-mono text-[10px] text-muted-foreground">{i.key}</span>
+                              {i.storyPoints != null && <Badge variant="secondary" className="px-1.5 text-[10px]">{i.storyPoints} pts</Badge>}
+                            </div>
+                            <p className="mt-0.5 line-clamp-2 text-sm font-medium">{i.title}</p>
+                            <div className="mt-2 flex items-center justify-between">
+                              {i.assignee ? (
+                                <Avatar className="h-5 w-5">
+                                  {i.assignee.pictureUrl && <AvatarImage src={i.assignee.pictureUrl} alt={i.assignee.name} />}
+                                  <AvatarFallback className="text-[8px]">{initials(i.assignee.name)}</AvatarFallback>
+                                </Avatar>
+                              ) : <span className="text-[10px] text-muted-foreground">Unassigned</span>}
+                              <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                                <div className="h-full rounded-full bg-sky-500" style={{ width: `${i.progress}%` }} />
+                              </div>
                             </div>
                           </div>
-                        </button>
-                      ))}
-                      {columnIssues.length === 0 && <p className="py-4 text-center text-[11px] text-muted-foreground">Empty</p>}
+                        );
+                      })}
+                      {columnIssues.length === 0 && <p className="py-4 text-center text-[11px] text-muted-foreground">Drop here</p>}
                     </CardContent>
                   </Card>
                 );
@@ -347,6 +432,7 @@ export default function ProjectWorkspacePage() {
             setDetail(null);
             await load();
           }}
+          onChanged={load}
           onDelete={() => deleteIssue(detail)}
         />
       )}
@@ -734,7 +820,7 @@ function PhaseDialog({
 /* --------------------------------- Issue dialog --------------------------------- */
 
 function IssueDialog({
-  open, onOpenChange, projectId, projectKey, methodology, sprints, phases, epics, members, teamId, issue, canManage, meId, onSaved, onDelete,
+  open, onOpenChange, projectId, projectKey, methodology, sprints, phases, epics, members, teamId, issue, canManage, meId, onSaved, onChanged, onDelete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -750,6 +836,7 @@ function IssueDialog({
   canManage?: boolean;
   meId?: string;
   onSaved: () => void;
+  onChanged?: () => void;
   onDelete?: () => void;
 }) {
   const isEdit = issue !== null;
@@ -768,6 +855,15 @@ function IssueDialog({
   const [epicId, setEpicId] = useState("NONE");
   const [dueDate, setDueDate] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [liveStatus, setLiveStatus] = useState("TODO");
+  const [liveProgress, setLiveProgress] = useState(0);
+
+  useEffect(() => {
+    if (open) {
+      setLiveStatus(issue?.status ?? "TODO");
+      setLiveProgress(issue?.progress ?? 0);
+    }
+  }, [open, issue]);
 
   useEffect(() => {
     if (open) {
@@ -790,7 +886,7 @@ function IssueDialog({
     setSubmitting(true);
     try {
       if (isEdit) {
-        const body: Record<string, unknown> = { status: issue!.status };
+        const body: Record<string, unknown> = { status: liveStatus };
         if (canEditWork) {
           Object.assign(body, {
             ...(manage ? {
@@ -939,10 +1035,11 @@ function IssueDialog({
               <div className="space-y-2">
                 <Label>Status</Label>
                 <Select
-                  value={issue!.status}
+                  value={liveStatus}
                   onValueChange={(v) => {
+                    setLiveStatus(v);
                     void api(`/api/issues/${issue!.id}`, { method: "PATCH", body: JSON.stringify({ status: v }) })
-                      .then(onSaved)
+                      .then(() => onChanged?.())
                       .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not update the status."));
                   }}
                 >
@@ -959,10 +1056,15 @@ function IssueDialog({
                   type="number"
                   min={0}
                   max={100}
-                  defaultValue={issue!.progress}
+                  value={liveProgress}
+                  onChange={(e) => setLiveProgress(Math.max(0, Math.min(100, Number(e.target.value))))}
                   onBlur={(e) => {
                     const v = Math.max(0, Math.min(100, Number(e.target.value)));
-                    if (Number.isFinite(v) && v !== issue!.progress) void api(`/api/issues/${issue!.id}`, { method: "PATCH", body: JSON.stringify({ progress: v }) }).then(onSaved);
+                    if (Number.isFinite(v) && v !== issue!.progress) {
+                      void api(`/api/issues/${issue!.id}`, { method: "PATCH", body: JSON.stringify({ progress: v }) })
+                        .then(() => onChanged?.())
+                        .catch((err: unknown) => toast.error(err instanceof Error ? err.message : "Could not update progress."));
+                    }
                   }}
                 />
               </div>

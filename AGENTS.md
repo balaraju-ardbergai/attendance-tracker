@@ -14,7 +14,7 @@ Guide for coding agents and humans working in this repository. Read this before 
 | Teams & Org Graph | `/teams`, `/org-graph` | teams with leads; reporting tree via `User.managerId`. Team leads see a "Member details" tab for their own team |
 | Expenses | `/expenses` | restricted: Directors/HR or `User.expenseAccess`. Recharts dashboards; scheduled email reports |
 | Expense email reports | `/api/reports/expense/[period]` | Vercel Cron (see `vercel.json`); recipients = `User.receivesExpenseReports`, configured by Directors; `CRON_SECRET` protects the cron endpoints |
-| Projects (JIRA-style tracker) | `/projects` | agile (SCRUM: epics, sprints, story points, Jira keys like `PRD-12`, backlog/board) and waterfall (phases). Issues = extended `Task` model |
+| Projects (JIRA-style tracker) | `/projects` | agile (SCRUM: epics, sprints, story points, Jira keys like `PRD-12`, backlog/board) and waterfall (phases). Issues = extended `Task` model. Board supports drag-and-drop between status columns (native HTML5 DnD, optimistic update, permission-checked); the issue dialog stays open on inline status/progress edits |
 | Assistant | floating chat widget (bottom-right) | rule-based, account-aware Q&A over the signed-in user's own data (`/api/assistant`) |
 | Connectors | `/connectors` | Outlook/Gmail OAuth, per-user |
 | Admin | `/users`, `/approvals`, `/dashboard`, `/audit` | user lifecycle goes through Director approvals; audit log is Director-only |
@@ -75,4 +75,5 @@ Env vars: `DATABASE_URL` (dedicated hosted DB), `AUTH_SECRET`, `NEXT_PUBLIC_APP_
 - Naming: the app is **Org Tracker**. The folder is still `attendance-portal` (don't rename it — their dev server/terminal point at it).
 - No Resend. Gmail only, for now.
 - No `LATE` attendance status.
+- Every visible control must be actionable in production: dashboard summary cards open people lists, employee cards open a drill-down via `/api/employees/[id]/overview` (leads may view their own people), the projects board is drag-and-drop.
 - Progress semantics everywhere: a milestone/step "counts" at 100%; partial percents contribute fractionally.

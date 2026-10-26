@@ -33,9 +33,11 @@ export async function GET() {
 
     const todayKey = serverTodayKey();
     const todayRecords = records.filter((r) => toKey(r.date) === todayKey);
+    const todayByUser = new Map(todayRecords.map((r) => [r.userId, r.status]));
 
     const employees = users.map((u) => ({
       ...u,
+      todayStatus: todayByUser.get(u.id) ?? null,
       stats: computeMonthStats(byUser.get(u.id) ?? [], year, month),
     }));
 
