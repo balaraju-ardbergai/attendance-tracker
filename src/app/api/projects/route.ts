@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
-import { canManageProject } from "@/lib/permissions";
+import { ledTeamIds } from "@/lib/permissions";
+import { isManagerRole, visibleProjectWhere } from "@/lib/permissions";
 import { AUDIT, logAudit } from "@/lib/audit";
 
 const KEY_RE = /^[A-Z][A-Z0-9]{1,9}$/;
@@ -10,23 +11,9 @@ const KEY_RE = /^[A-Z][A-Z0-9]{1,9}$/;
 export async function GET() {
   return handleRoute(async () => {
     const { session } = await requireActiveUser();
-    const isManager = session.role === "ADMIN" || session.role === "DIRECTOR";
-
-    const ledTeams = await prisma.team.findMany({ where: { leadId: session.userId }, select: { id: true } });
-    const memberships = await prisma.teamMember.findMany({ where: { userId: session.userId }, select: { teamId: true } });
-    const visibleTeamIds = [...ledTeams.map((t) => t.id), ...memberships.map((m) => m.teamId)];
 
     const projects = await prisma.project.findMany({
-      where: isManager
-        ? {}
-        : {
-            OR: [
-              { leadId: session.userId },
-              { teamId: { in: visibleTeamIds } },
-              { tasks: { some: { assigneeId: session.userId } } },
-              { teamId: null },
-            ],
-          },
+      where: await visibleProjectWhere(session),
       orderBy: { createdAt: "desc" },
       include: {
         lead: { select: { id: true, name: true, email: true, pictureUrl: true } },
@@ -70,6 +57,10 @@ export async function GET() {
 export async function POST(req: Request) {
   return handleRoute(async () => {
     const { session } = await requireActiveUser();
+    const ledCount = (await ledTeamIds(session.userId)).length;
+    if (!isManagerRole(session.role) && ledCount === 0) {
+      throw new ApiError(403, "Only HR Admins, Directors or team leads can create projects.");
+    }
     const body = await readJson<{
       name?: string;
       key?: string;

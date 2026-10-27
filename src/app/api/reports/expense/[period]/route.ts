@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, requireExpenseAccess } from "@/lib/api";
-import { serverTodayKey, toKey } from "@/lib/dates";
+import { toKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 import { expenseReportEmail, sendMail } from "@/lib/mail";
 import { EXPENSE_CATEGORY_LABEL } from "@/lib/roles";

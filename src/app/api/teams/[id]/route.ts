@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
+import { canManageTeamMembers } from "@/lib/permissions";
 import { toKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 
@@ -77,8 +78,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return handleRoute(async () => {
     const { id } = await params;
-    const { session } = await requireActiveUser(["ADMIN", "DIRECTOR"]);
+    const { session } = await requireActiveUser();
     const team = await loadTeam(id);
+    if (!(await canManageTeamMembers(session, team))) {
+      throw new ApiError(403, "Only the team lead, HR or Directors can edit this team.");
+    }
     const body = await readJson<{ name?: string; description?: string; leadId?: string | null }>(req);
 
     if (body.leadId) {

@@ -383,7 +383,7 @@ model Task {
   createdById String
   // Jira-style work item fields (all optional so simple adhoc tasks still work)
   projectId   String?
-  key         String?
+  key         String? @unique
   seq         Int?
   type        TaskType     @default(TASK)
   epicId      String?

@@ -296,7 +296,7 @@ function CreateProjectDialog({
       setTeamId("NONE");
       setLeadId("NONE");
       api<{ teams: { id: string; name: string }[] }>("/api/teams").then((d) => setTeams(d.teams)).catch(() => {});
-      api<{ users: { id: string; name: string; isActive: boolean }[] }>("/api/users")
+      api<{ users: { id: string; name: string; isActive: boolean }[] }>("/api/directory")
         .then((d) => setUsers(d.users.filter((u) => u.isActive)))
         .catch(() => {});
     }

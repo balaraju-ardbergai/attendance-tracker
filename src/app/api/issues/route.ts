@@ -1,13 +1,12 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
-import { canManageProject } from "@/lib/permissions";
+import { canManageProject, visibleProjectWhere } from "@/lib/permissions";
 import { fromKey, toKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 
 const KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TYPES = ["EPIC", "STORY", "TASK", "BUG"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
-const STATUSES = ["TODO", "IN_PROGRESS", "IN_REVIEW", "BLOCKED", "COMPLETED"];
 
 const ISSUE_SELECT = {
   id: true, key: true, seq: true, title: true, description: true,
@@ -37,8 +36,30 @@ export async function GET(req: Request) {
     const epicId = url.searchParams.get("epicId");
     const scope = url.searchParams.get("scope") ?? "all";
 
+    // Visibility: employees only see issues assigned to them or in projects they
+    // can see; HR/Directors see everything.
+    let visibility: Record<string, unknown> = {};
+    if (session.role !== "ADMIN" && session.role !== "DIRECTOR") {
+      if (projectId) {
+        const project = await prisma.project.findFirst({
+          where: { id: projectId, ...(await visibleProjectWhere(session)) },
+          select: { id: true },
+        });
+        if (!project) throw new ApiError(404, "Project not found.");
+      } else {
+        visibility = {
+          OR: [
+            { assigneeId: session.userId },
+            { createdById: session.userId },
+            { project: await visibleProjectWhere(session) },
+          ],
+        };
+      }
+    }
+
     const tasks = await prisma.task.findMany({
       where: {
+        ...visibility,
         ...(projectId ? { projectId } : {}),
         ...(sprintId ? { sprintId } : {}),
         ...(epicId ? { epicId } : {}),

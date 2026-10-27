@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
-import { fromKey, serverTodayKey } from "@/lib/dates";
+import { fromKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 
 const KEY_RE = /^\d{4}-\d{2}-\d{2}$/;

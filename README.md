@@ -1,55 +1,62 @@
 # Org Tracker
 
-An organization attendance tracking application built with **Next.js (App Router) + shadcn/ui + PostgreSQL (Prisma)**, ready to deploy on **Vercel**.
+A complete internal organization platform — attendance, leave/WFH, courses & certifications, expenses with scheduled email analytics, teams & org hierarchy, JIRA-style project tracking (Scrum + Waterfall), and a built-in assistant — built with **Next.js 15 (App Router) + shadcn/ui + PostgreSQL (Prisma)**, ready to deploy on **Vercel**.
 
-## Features
+> Formerly "Attendance Portal" → "OrgPulse" → **Org Tracker** as the scope grew. The folder is still `attendance-portal`.
 
-| Area | Details |
-| --- | --- |
-| **Roles** | Director, HR Admin (`ADMIN`), Employee |
-| **Sign in** | Email + password, JWT session in an httpOnly cookie, route protection via middleware |
-| **First login** | Accounts created by HR start with a temporary password; users must set a new one before they can use the portal |
-| **Forgot password** | 6-digit OTP to the registered email, valid 5 minutes, single use; confirmation email after reset |
-| **User addition** | HR submits name/email → Director approves → user is created with a temporary password + invitation email. Directors can add users directly. |
-| **HR management** | Assign/remove HR role, remove/reactivate users — Directors apply directly, HR Admins request it (approval queue) |
-| **Attendance** | One-click daily mark with time + optional geolocation, clock-out, month calendar view. Statuses: Present / Leave / WFH / Absent. |
-| **Requests** | Leave / WFH with date range + reason; approve/reject with note (HR Admin + Director), cancel (owner); approval writes LEAVE/WFH onto the employee's calendar and emails the outcome |
-| **Courses** | Certification & training tracks modelled on a progress-tracker spreadsheet: ordered milestones (phase-grouped: prerequisite / prep course / exam, with links + durations), per-person progress per milestone (10–90% partial or Completed), per-person summary (steps completed, % complete, currently-at, status) and per-milestone org-level progress. Optional class attendance: the creator enables it, sets the schedule, generates recurring session dates, and marks/collects attendance (participants can mark themselves for today's class). |
-| **Organization dashboard** | Summary cards + one card per employee (picture, name, email, role) with a combined progress bar of present/late/leave/WFH/absent for the current month |
-| **HR Activity (audit)** | Director-only trail of every administrative action (who, what, whom, when) |
-| **Connectors** | OAuth connections for Outlook (Microsoft Graph) and Gmail (Google), per user, with real token exchange — just add API keys |
-| **Expenses** | Every org expense: vendor/client billings, office purchases, event prize money, other. Categories, vendor/party, payment method, optional team attribution. Access restricted to Directors + HR, who can **grant access to anyone**. |
-| **Expense analytics & email reports** | Visual dashboards (weekly/monthly totals, 6-month trend, category and team splits) plus **scheduled weekly (Mon 09:00) and monthly (1st 09:00) email reports** via Vercel Cron. Directors configure who receives the emails. |
-| **Teams & Org Graph** | Teams with leads and members (Team Graph + Team Mgmt: create, add/remove members, set lead, per-team task and expense stats) and a company-wide **Org Graph** reporting tree driven by each person's manager. |
-| **Task & Progress Tracker** | Tasks with assignee, team, priority, due date, status and 0–100% progress. Assignees update their own status/progress; admins see all tasks and a per-person progress summary. |
+For coding agents: read **[AGENTS.md](AGENTS.md)** first — it documents architecture, conventions, environment gotchas and hard-won lessons in depth.
+
+---
+
+## Modules
+
+| Module | Route | What it does |
+| --- | --- | --- |
+| **Attendance** | `/attendance` | Daily mark with time + optional geolocation, clock-out, month calendar, monthly stats. Statuses: `PRESENT / LEAVE / WFH / ABSENT` (no LATE by design) |
+| **Requests** | `/requests` | Leave / WFH with date ranges, overlap checks, reasons. Reviewed by HR Admins, Directors **and the requester's team lead / manager**. Approval writes LEAVE/WFH onto the employee's calendar and emails the outcome |
+| **Projects** | `/projects` | JIRA-style tracker. **Scrum**: projects with keys (`PRD-12`), epics, sprints (planned → active → completed, goal + dates), backlog & kanban board with **drag-and-drop** between status columns, story points, acceptance criteria, types (Epic/Story/Task/Bug). **Waterfall**: sequential phases with ordering. Assignees update their own work; leads/HR manage everything |
+| **Courses** | `/courses` | Certification tracker (modelled on a spreadsheet): ordered milestones grouped by phase (PREREQUISITE / PREP COURSE / EXAM) with links & durations, per-person % progress (10–90 partial or Completed), org-level averages, optional class sessions with attendance (Present/Absent/Excused) |
+| **Teams** | `/teams` | Teams with leads and members. Leads get a **Member details** view (attendance this month, pending requests, open tasks, course progress) and can manage their own team. Per-team task and expense stats |
+| **Org Graph** | `/org-graph` | Company reporting tree driven by `User.managerId` (set from the Users page) |
+| **Expenses** | `/expenses` | Vendor/client billings, office purchases, event prize money. Categories, party, payment method, team attribution, filters. Access: Directors/HR or granted users |
+| **Expense analytics** | `/expenses` | Summary cards (week/month), 6-month trend, category donut, per-team bars — plus **clickable drill-downs** |
+| **Email reports** | `/api/reports/expense/[period]` | Weekly (Mon 09:00) and monthly (1st 09:00) reports via **Vercel Cron** through Gmail SMTP. Recipients configured by Directors. Manual "send now" buttons |
+| **Dashboard** | `/dashboard` | Org-wide: every summary card is clickable and opens the matching people list; every employee card opens a drill-down (today, month stats, open tasks, courses, pending requests) |
+| **Assistant** | floating widget (bottom-right) | Rule-based, account-aware Q&A over the signed-in user's own data — certification progress, attendance, tasks, requests, team, expenses |
+| **Connectors** | `/connectors` | Per-user OAuth for Outlook (Microsoft Graph) and Gmail |
+| **Administration** | `/users`, `/approvals`, `/audit` | User lifecycle with Director approvals, HR-role assignment, manager assignment, expense-access grants, Director-only audit trail |
+
+## Security model
+
+- Sessions: JWT in an httpOnly cookie (7 days). **Authorization is never trusted from the token** — every API call re-reads the user from the database, so role changes, deactivations and forced password resets take effect immediately.
+- Login brute-force guard: 5 failed attempts per email → 15-minute lockout.
+- Forgot password: 6-digit OTP, 5-minute expiry, single use, hashed at rest, generic response (no account enumeration), 60-second resend throttle.
+- First-login: accounts created by HR start with a temporary password; **every API returns 403 until the user completes the forced password change**.
+- Passwords: bcrypt (cost 10). Secrets: `AUTH_SECRET` JWT signing key.
+- Project visibility: HR/Directors see all; others see projects they lead, projects of their teams, org-wide (team-less) projects, and projects they're assigned in. Issue listings follow the same rules.
 
 ## Quick start (local)
 
-**Prerequisites:** Node 18.18+, a PostgreSQL database (local or hosted), npm.
+**Prerequisites:** Node 18.18+, PostgreSQL, npm.
 
-1. **Configure the environment** — edit `.env` and set your Postgres password in `DATABASE_URL`:
+1. Edit `.env` and set your Postgres password:
 
    ```
    DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/attendance?schema=public"
    ```
 
-   The `attendance` database is created automatically by `db push` (your user needs CREATEDB, which the default `postgres` user has).
+   > **Use a dedicated database.** `prisma db push` syncs the *entire* database it points at — never point it at a database shared with other applications. The app's database is named `attendance`.
 
-2. **Create the schema and seed demo data:**
+2. Create schema + demo data and run:
 
    ```bash
    npm install
    npm run db:push
    npm run db:seed
-   ```
-
-3. **Run it:**
-
-   ```bash
    npm run dev
    ```
 
-   Open http://localhost:3000. Email has no provider configured locally, so OTPs and invitations are **printed to the dev server console** (and the OTP is also returned in the API response in dev mode).
+3. Open http://localhost:3000. Without `GMAIL_USER`/`GMAIL_APP_PASSWORD`, emails print to the dev-server console (and the OTP is returned in the API response in dev mode).
 
 ### Demo accounts (from the seed)
 
@@ -57,97 +64,73 @@ An organization attendance tracking application built with **Next.js (App Router
 | --- | --- | --- |
 | Director | `director@org.com` | `Director@123` |
 | HR Admin | `hr@org.com` | `Hr@12345` |
-| Employee | `employee@org.com` | `Emp@12345` |
-| Employee | `sara@org.com` / `david@org.com` / `anita@org.com` | `Emp@12345` |
+| Employees | `employee@org.com`, `sara@org.com`, `david@org.com`, `anita@org.com` | `Emp@12345` |
+
+Seeded content: a month of attendance, pending/approved requests, the two Claude certification tracks (with real course links), Engineering & Marketing teams, sample expenses, and two projects — `PRD` (Scrum, epics + sprints + stories) and `OPS` (Waterfall, phases).
 
 ## Deploying to Vercel
 
-1. **Database** — create a hosted Postgres (Vercel Postgres, Neon or Supabase all work and are pgAdmin-compatible via their connection strings). Copy the connection string.
-2. **Push the schema** once from your machine against the production URL: `DATABASE_URL="<prod-url>" npx prisma db push` (optionally seed with `npm run db:seed`).
-3. **Import the repo into Vercel** and set the environment variables:
+1. Create a hosted Postgres (Vercel Postgres / Neon / Supabase — all pgAdmin-compatible). Push the schema once from a machine with credentials: `DATABASE_URL="<prod-url>" npx prisma db push`.
+2. Import the repo into Vercel and set environment variables:
 
    | Variable | Value |
    | --- | --- |
-   | `DATABASE_URL` | your production Postgres connection string |
+   | `DATABASE_URL` | dedicated production Postgres connection string |
    | `AUTH_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
    | `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` (used in email links) |
-   | `GMAIL_USER` | the Gmail account that sends the emails |
-   | `GMAIL_APP_PASSWORD` | a Google **App Password** for that account (see below) |
-   | `DEV_EXPOSE_OTP` | **leave unset in production** |
+   | `GMAIL_USER` | the Gmail account that sends emails |
+   | `GMAIL_APP_PASSWORD` | Google **App Password** (2-Step Verification → App passwords); spaces stripped automatically |
+   | `CRON_SECRET` | random string — protects the scheduled report endpoints |
    | `MS_CLIENT_ID` / `MS_CLIENT_SECRET` / `MS_TENANT_ID` | optional, Outlook connector |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional, Gmail connector |
-   | `CRON_SECRET` | optional but recommended on Vercel — protects the scheduled report endpoints (Vercel sends it as `Authorization: Bearer …`) |
+   | `DEV_EXPOSE_OTP` | **leave unset in production** |
 
-   `prisma generate` runs automatically on install (`postinstall` script).
+   `prisma generate` runs automatically on install (`postinstall`). The crons in `vercel.json` deploy with the project.
 
-## How the email flows work
+3. OAuth connectors need redirect URIs registered: `https://YOUR-APP/api/connections/outlook/callback` and `.../gmail/callback` (plus localhost variants for dev).
 
-`src/lib/mail.ts` sends every email through **Gmail SMTP** (`smtp.gmail.com:465` via nodemailer) using `GMAIL_USER` + `GMAIL_APP_PASSWORD`; when those aren't set, emails are logged to the server console so all flows are testable offline. Emails sent: invitation (with temporary password), password-reset OTP, password-changed confirmation, request outcome, approval-needed (to Directors), approval outcome (to requester).
+## Email flows
 
-### Creating the Gmail App Password
+All email goes through **Gmail SMTP** (`smtp.gmail.com:465`, nodemailer) when `GMAIL_USER` + `GMAIL_APP_PASSWORD` are set; otherwise every email is logged to the server console. Sent: invitations (temporary password), OTP, password-changed confirmation, request outcomes, approval-needed (to Directors), approval outcomes, weekly/monthly expense reports.
 
-1. On the sending Google account, enable **2-Step Verification** (myaccount.google.com → Security).
-2. Go to **Security → 2-Step Verification → App passwords** (or https://myaccount.google.com/apppasswords).
-3. Create one (name it "Org Tracker"), copy the 16-character password into `GMAIL_APP_PASSWORD` (spaces are stripped automatically).
-4. Restart the dev server. Regular account passwords do **not** work — Gmail requires App Passwords for SMTP.
+## Design decisions & production notes
 
-## Connectors setup
-
-- **Outlook:** register an app in [Azure Portal → App registrations](https://portal.azure.com), add a **Web** redirect URI `https://YOUR-APP/api/connections/outlook/callback` (and `http://localhost:3000/api/connections/outlook/callback` for dev), grant delegated `openid email profile`, put the client id/secret in env.
-- **Gmail:** create an OAuth client in [Google Cloud Console](https://console.cloud.google.com) with the same callback pattern (`/api/connections/gmail/callback`), enable OpenID scopes.
-
-Until credentials exist the UI shows "Not configured" and doesn't let anyone start the flow.
-
-## Notes & design decisions
-
-- **Dates** are pinned to the *server's* calendar day (UTC on Vercel). A "day" is the server's date — fine for a single-timezone organization.
-- **Geolocation** uses the browser API; browsers only expose it on `localhost` or HTTPS. If the user denies it, attendance is still marked without coordinates.
-- **Working days** are Mon–Fri; today only counts as "absent" in stats once marked (or after the day passes).
-- **Removals** deactivate accounts (history preserved) rather than deleting rows.
-- **Course progress** mirrors the tracker sheet: a milestone counts as a completed step at 100%; partial percentages (10–90%) contribute fractionally to "% Complete"; "Currently at" is the first milestone below 100% in order.
-- **pgAdmin** can point at the same `DATABASE_URL` to browse/edit data.
-
-## Courses (certification tracker)
-
-The Courses section replicates a spreadsheet-based certification tracker (e.g. the Claude certification tracks):
-
-- **Structure** — a course has ordered **milestones** (name, phase like `PREREQUISITE`/`PREP COURSE`/`EXAM`, description, link, duration) and **participants** (enrolled employees).
-- **Tracker tab** — the matrix: participants as rows, milestones as columns (grouped by phase), each cell picks `Not started / 10%–90% / Completed`; summary columns show steps completed, % complete, "Currently at" (next step) and status. Participants can edit their own cells; HR Admins and Directors can edit anyone's.
-- **Org level** — each milestone shows the org-wide average progress and how many participants completed it; the course list shows overall org progress per course.
-- **Classes & attendance** — if the creator enables attendance for the course (some courses have recurring classes), they set the schedule note and generate recurring session dates (weekday pattern × weeks, or single dates). Admins mark anyone's attendance (Present/Absent/Excused); participants can mark themselves for today's session.
-
-The seed includes the two Claude certification tracks from the original tracker, with real course links and progress patterns.
-
-## Expenses, teams & tasks
-
-- **Access model** — Expenses are visible to Directors and HR Admins by default; they can grant/revoke access to any user from the Users page ("Grant expense access"). Directors configure the **report recipients** on the Expenses → Reports tab; subscribed people also get Expenses access.
-- **Email reports** — `vercel.json` defines two crons hitting `/api/reports/expense/weekly` (Mondays 09:00) and `/api/reports/expense/monthly` (1st 09:00). The weekly report covers the last completed Mon–Sun week; the monthly report covers the previous calendar month. Set `CRON_SECRET` in Vercel so only Vercel can trigger them. Both can also be sent manually from the Expenses page ("Send … report now").
-- **Expenses point at teams** — an expense can be attributed to a Team, powering the per-team spend charts and team pages.
-- **Org Graph** — each person's manager is set from the Users page ("Set manager…"); the Org Graph renders the reporting tree. Manager assignment is admin/director only.
-- **Important:** `prisma db push` syncs the *entire* database it points at. The app therefore uses its own dedicated `attendance` database — don't point `DATABASE_URL` at a database shared with other applications.
-
-## Database layout note
+- **Dates** are pinned to the server's calendar day (UTC on Vercel). Working days are Mon–Fri; today counts as absent in stats only once marked or passed.
+- **Geolocation** requires `localhost` or HTTPS; denial still records attendance without coordinates.
+- **Removals** deactivate accounts (history preserved); Directors cannot be removed from the portal.
+- **Course progress** semantics: a milestone counts as a completed step at 100%; partial percentages contribute fractionally; "Currently at" is the first milestone below 100% in order.
+- **Authorization is DB-backed on every request** (see Security model) — the cost is one user query per API call, deliberately chosen over stale-JWT role checks.
+- **Assistant** is rule-based and strictly scoped to the signed-in user's data; an LLM provider can be layered onto `/api/assistant` later without changing the client.
+- **Login rate limiting** is in-memory per server instance — sufficient against casual stuffing; add a shared store (e.g. Upstash Redis) if you need cross-instance limits.
+- **pgAdmin** can point at the same `DATABASE_URL` to browse data.
 
 ## Project structure
 
 ```
-prisma/schema.prisma       # User, Attendance, Request, Approval, Otp, Connection, AuditLog,
-                           # Course, Milestone, MilestoneProgress, CourseEnrollment, CourseSession, CourseAttendance
-prisma/seed.ts             # demo org: 1 Director, 1 HR, 4 employees + month of attendance + 2 certification courses
-src/middleware.ts          # session check, forced first-login reset, auth-page redirects
-src/lib/                   # db, auth (JWT/bcrypt/OTP), mail (Gmail SMTP), audit, date/stats helpers
-src/app/api/               # auth, me, attendance, requests, users, approvals, dashboard, audit, connections, courses
-src/app/(auth)/            # login, forgot-password, reset-password, change-password
-src/app/(app)/             # attendance, requests, courses, dashboard, users, approvals, audit, connectors
-src/components/            # app shell, month grid, combined stat bar, request dialog, ui/ (shadcn)
+prisma/schema.prisma   # User, Attendance, Request, Approval, Otp, Connection, AuditLog,
+                       # Course/Milestone/MilestoneProgress/CourseEnrollment/CourseSession/CourseAttendance,
+                       # Team/TeamMember, Expense, Project/Sprint/Phase, Task (Jira-style issues)
+prisma/seed.ts         # demo org: users, attendance, courses, teams, expenses, PRD/OPS projects
+src/middleware.ts      # page-route protection, forced first-login reset, auth-page redirects
+src/lib/               # api (guards/handlers), auth (JWT/bcrypt/OTP), permissions (hierarchy),
+                       # mail (Gmail SMTP), audit, dates/stats, client helpers, roles labels
+src/app/api/           # auth, me, directory, attendance, requests, users, approvals, dashboard,
+                       # audit, connections, courses, expenses (+analytics), reports, teams (+overview),
+                       # org, projects, sprints, phases, issues, employees/[id]/overview, assistant
+src/app/(auth)/        # login, forgot-password, reset-password, change-password
+src/app/(app)/         # attendance, requests, projects, courses, teams, org-graph, expenses,
+                       # dashboard, users, approvals, audit, connectors
+src/components/        # page-header, app shell, chat widget, month grid, stat bar, charts, request dialog, ui/ (shadcn)
+vercel.json            # weekly + monthly report crons
 ```
 
 ## Scripts
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | start dev server |
+| `npm run dev` | dev server (http://localhost:3000) |
 | `npm run build` / `npm start` | production build / serve |
+| `npm run lint` | ESLint |
 | `npm run db:push` | push the Prisma schema to the database |
-| `npm run db:seed` | (re)seed demo data |
+| `npm run db:seed` | (re)seed demo data (idempotent) |
 | `npm run db:generate` | regenerate the Prisma client |

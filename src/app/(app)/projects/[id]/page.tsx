@@ -193,7 +193,9 @@ export default function ProjectWorkspacePage() {
           {project.description && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{project.description}</p>}
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New issue</Button>
+          {canManage && (
+            <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New issue</Button>
+          )}
           {canManage && (
             <Button variant="outline" size="icon" onClick={() => setEditProject(true)} aria-label="Project settings"><Pencil className="h-4 w-4" /></Button>
           )}
@@ -246,10 +248,8 @@ export default function ProjectWorkspacePage() {
             <CardContent>
               <IssueTable
                 issues={workItems}
-                sprints={sprints}
-                phases={phases}
                 canManage={canManage}
-                isScrum={isScrum}
+                meId={me?.id ?? ""}
                 onOpen={setDetail}
                 onPatch={patchIssue}
                 onDelete={deleteIssue}
@@ -455,13 +455,11 @@ export default function ProjectWorkspacePage() {
 /* --------------------------------- Issue table --------------------------------- */
 
 function IssueTable({
-  issues, sprints, phases, canManage, isScrum, onOpen, onPatch, onDelete,
+  issues, canManage, meId, onOpen, onPatch, onDelete,
 }: {
   issues: Issue[];
-  sprints: Sprint[];
-  phases: Phase[];
   canManage: boolean;
-  isScrum: boolean;
+  meId: string;
   onOpen: (issue: Issue) => void;
   onPatch: (id: string, body: Record<string, unknown>) => void;
   onDelete: (issue: Issue) => void;
@@ -472,7 +470,7 @@ function IssueTable({
         <TableRow>
           <TableHead>Key</TableHead>
           <TableHead>Title</TableHead>
-          <TableHead className="hidden lg:table-cell">{isScrum ? "Sprint" : "Phase"}</TableHead>
+          <TableHead className="hidden lg:table-cell">Sprint / Phase</TableHead>
           <TableHead className="hidden xl:table-cell">Epic</TableHead>
           <TableHead className="hidden md:table-cell">Assignee</TableHead>
           <TableHead className="hidden sm:table-cell">Pts</TableHead>
@@ -495,7 +493,7 @@ function IssueTable({
               </p>
             </TableCell>
             <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
-              {(isScrum ? i.sprint?.name : i.phase?.name) ?? "Backlog"}
+              {i.sprint?.name ?? i.phase?.name ?? "Backlog"}
             </TableCell>
             <TableCell className="hidden font-mono text-xs text-muted-foreground xl:table-cell">{i.epic?.key ?? "—"}</TableCell>
             <TableCell className="hidden md:table-cell">
@@ -511,7 +509,7 @@ function IssueTable({
             </TableCell>
             <TableCell className="text-sm">{i.storyPoints ?? "—"}</TableCell>
             <TableCell onClick={(e) => e.stopPropagation()}>
-              {canManage || i.assignee ? (
+              {canManage || i.assignee?.id === meId ? (
                 <Select value={i.status} onValueChange={(v) => onPatch(i.id, { status: v })}>
                   <SelectTrigger size="sm" className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>

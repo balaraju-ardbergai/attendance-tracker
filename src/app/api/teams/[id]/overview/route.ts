@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, requireActiveUser } from "@/lib/api";
 import { canAccessTeam } from "@/lib/permissions";
-import { computeMonthStats, fromKey, serverTodayKey, toKey } from "@/lib/dates";
+import { computeMonthStats, fromKey, toKey } from "@/lib/dates";
 
 // GET /api/teams/[id]/overview — member-level details for the team lead,
 // HR Admins and Directors: attendance this month, requests, tasks, courses.

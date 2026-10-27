@@ -7,8 +7,13 @@ export async function GET(req: Request) {
     const { user } = await requireActiveUser();
     const url = new URL(req.url);
     const now = new Date();
-    const year = Number(url.searchParams.get("year")) || now.getFullYear();
-    const month = Number(url.searchParams.get("month")) || now.getMonth(); // 0-based
+    // Note: month is 0-based and January is "0" — never use || defaults here.
+    const yearParam = url.searchParams.get("year");
+    const monthParam = url.searchParams.get("month");
+    const year = yearParam && /^\d{4}$/.test(yearParam) ? Number(yearParam) : now.getFullYear();
+    const month = monthParam !== null && monthParam !== "" && Number.isFinite(Number(monthParam)) ? Number(monthParam) : now.getMonth();
+    if (month < 0 || month > 11) throw new ApiError(400, "Month must be between 0 and 11.");
+    if (year < 2000 || year > 2100) throw new ApiError(400, "Year out of range.");
 
     const start = fromKey(toKey(new Date(Date.UTC(year, month, 1))));
     const end = fromKey(toKey(new Date(Date.UTC(year, month + 1, 1))));

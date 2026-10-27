@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
-import { canManageProject } from "@/lib/permissions";
+import { canManageProject, visibleProjectWhere } from "@/lib/permissions";
 import { toKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 
@@ -28,12 +28,17 @@ async function loadProject(id: string) {
   return project;
 }
 
-// GET /api/projects/[id] — full workspace payload.
+// GET /api/projects/[id] — full workspace payload (visibility-checked).
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return handleRoute(async () => {
-    await requireActiveUser();
+    const { session } = await requireActiveUser();
     const { id } = await params;
-    const project = await loadProject(id);
+
+    // Visibility: same rules as the projects list.
+    const project = await prisma.project.findFirst({
+      where: { id, ...(await visibleProjectWhere(session)) },
+    });
+    if (!project) throw new ApiError(404, "Project not found.");
 
     const [tasks, sprints, phases] = await Promise.all([
       prisma.task.findMany({
@@ -45,16 +50,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       prisma.phase.findMany({ where: { projectId: id }, orderBy: { order: "asc" } }),
     ]);
 
-    const { session } = await requireActiveUser();
     const canManage = await canManageProject(session, project);
 
+    // Assignee options: team members when the project has a team, otherwise
+    // everyone active (org-wide project).
     const members = project.teamId
       ? (await prisma.teamMember.findMany({
           where: { teamId: project.teamId },
           include: { user: { select: { id: true, name: true, email: true, pictureUrl: true, isActive: true } } },
           orderBy: { joinedAt: "asc" },
         })).map((m) => m.user)
-      : null;
+      : await prisma.user.findMany({
+          where: { isActive: true },
+          select: { id: true, name: true, email: true, pictureUrl: true, isActive: true },
+          orderBy: { name: "asc" },
+        });
 
     return ok({
       project: {

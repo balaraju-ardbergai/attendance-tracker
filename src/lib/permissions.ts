@@ -35,6 +35,37 @@ export function assertManageProject(condition: boolean) {
   if (!condition) throw new ApiError(403, "Only the project lead, its team lead, HR or Directors can do that.");
 }
 
+/**
+ * Prisma `where` fragment limiting projects to what the user may see:
+ * HR/Directors see everything; others see projects they lead, projects of
+ * their teams, org-wide projects (no team) and projects they are assigned in.
+ */
+export async function visibleProjectWhere(session: { userId: string; role: AppRole }) {
+  if (isManagerRole(session.role)) return {};
+  const led = await ledTeamIds(session.userId);
+  const memberships = await prisma.teamMember.findMany({
+    where: { userId: session.userId },
+    select: { teamId: true },
+  });
+  const teamIds = [...led, ...memberships.map((m) => m.teamId)];
+  return {
+    OR: [
+      { leadId: session.userId },
+      { teamId: { in: teamIds } },
+      { teamId: null },
+      { tasks: { some: { assigneeId: session.userId } } },
+    ],
+  };
+}
+
+/** Is the user allowed to manage members/details of this team? */
+export async function canManageTeamMembers(
+  session: { userId: string; role: AppRole },
+  team: { leadId: string | null },
+): Promise<boolean> {
+  return isManagerRole(session.role) || team.leadId === session.userId;
+}
+
 /** Can this session review (approve/reject) a request made by `requesterId`? */
 export async function canReviewRequestOf(
   session: { userId: string; role: AppRole },

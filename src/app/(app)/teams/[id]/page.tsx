@@ -128,6 +128,8 @@ export default function TeamDetailPage() {
   }
 
   const { team, members, taskStats, recentTasks, expenseTotal, expenseThisMonth, recentExpenses } = data;
+  const isLead = team.leadId === me?.id;
+  const canManageNow = canManage || isLead;
 
   return (
     <div className="space-y-6">
@@ -139,12 +141,14 @@ export default function TeamDetailPage() {
           <h1 className="text-2xl font-semibold">{team.name}</h1>
           {team.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{team.description}</p>}
         </div>
-        {canManage && (
+        {(canManageNow || isLead) && (
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>Edit team</Button>
-            <Button variant="outline" size="sm" className="border-rose-500/40 text-rose-600 hover:bg-rose-500/10" onClick={deleteTeam}>
-              <Trash2 className="h-4 w-4" /> Delete
-            </Button>
+            {canManage && (
+              <Button variant="outline" size="sm" className="border-rose-500/40 text-rose-600 hover:bg-rose-500/10" onClick={deleteTeam}>
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -163,7 +167,7 @@ export default function TeamDetailPage() {
             <CardTitle className="text-base">Team members</CardTitle>
             <CardDescription>Click the crown on a member to make them the lead.</CardDescription>
           </div>
-          {canManage && <Button size="sm" onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add member</Button>}
+          {canManageNow && <Button size="sm" onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add member</Button>}
         </CardHeader>
         <CardContent>
           {members.length === 0 ? (
@@ -188,7 +192,7 @@ export default function TeamDetailPage() {
                         {m.department ? ` · ${m.department}` : ""}
                       </p>
                     </div>
-                    {canManage && (
+                    {canManageNow && (
                       <div className="flex gap-1">
                         {!isLead && (
                           <Button variant="ghost" size="icon" className="h-7 w-7" title="Make lead" onClick={() => setLead(m.id)}>
@@ -208,7 +212,7 @@ export default function TeamDetailPage() {
         </CardContent>
       </Card>
 
-      {(canManage || team.leadId === me?.id) && <MemberDetailsSection teamId={teamId} />}
+      {(canManageNow || isLead) && <MemberDetailsSection teamId={teamId} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -257,7 +261,7 @@ export default function TeamDetailPage() {
         )}
       </div>
 
-      {canManage && (
+      {canManageNow && (
         <AddMemberDialog
           open={addOpen}
           onOpenChange={setAddOpen}
@@ -270,7 +274,7 @@ export default function TeamDetailPage() {
         />
       )}
 
-      {canManage && (
+      {canManageNow && (
         <EditTeamDialog
           open={editOpen}
           onOpenChange={setEditOpen}

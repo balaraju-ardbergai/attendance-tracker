@@ -156,11 +156,12 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Clickable summary cards — each opens the list of matching people */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <SummaryCard label="Employees" sub="everyone active" value={data.summary.employees} icon={Users2} onClick={() => setFilter("ALL")} />
             <SummaryCard label="Present today" sub="click to see who" value={data.summary.presentToday} icon={Users2} onClick={() => setFilter("PRESENT")} />
             <SummaryCard label="On leave today" sub="click to see who" value={data.summary.onLeaveToday} icon={Palmtree} onClick={() => setFilter("LEAVE")} />
             <SummaryCard label="WFH today" sub="click to see who" value={data.summary.wfhToday} icon={HomeIcon} onClick={() => setFilter("WFH")} />
+            <SummaryCard label="Not marked today" sub="click to see who" value={data.summary.notMarkedToday} icon={CalendarX} onClick={() => setFilter("NOT_MARKED")} />
           </div>
 
           <div>

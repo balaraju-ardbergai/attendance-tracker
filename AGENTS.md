@@ -1,79 +1,77 @@
-# AGENTS.md — Org Tracker (formerly "Attendance Portal")
+# AGENTS.md — Org Tracker (formerly "Attendance Portal" / "OrgPulse")
 
-Guide for coding agents and humans working in this repository. Read this before making changes.
+Operating guide for coding agents and humans in this repository. **Read this fully before changing anything.**
 
 ## What this app is
 
-**Org Tracker** is an internal organization-management web app for a small company. It covers:
+**Org Tracker** (folder name `attendance-portal`) is a production internal platform for a small company, deployed on Vercel. Modules and routes:
 
 | Module | Route | Notes |
 | --- | --- | --- |
-| Attendance | `/attendance` | daily mark + geolocation, clock-out, month calendar, stats. Statuses: `PRESENT / LEAVE / WFH / ABSENT` (the user explicitly removed `LATE` — do not reintroduce) |
-| Leave / WFH requests | `/requests` | employees submit; HR Admins, Directors **and team leads of the requester** review |
-| Courses | `/courses` | certification tracker (from a spreadsheet): milestones with phases, per-person % progress, org averages, optional class sessions + attendance |
-| Teams & Org Graph | `/teams`, `/org-graph` | teams with leads; reporting tree via `User.managerId`. Team leads see a "Member details" tab for their own team |
+| Attendance | `/attendance` | daily mark + geolocation, clock-out, month calendar, stats. Statuses: `PRESENT / LEAVE / WFH / ABSENT`. The user explicitly removed `LATE` — do not reintroduce |
+| Requests | `/requests` | leave/WFH; reviewed by HR Admins, Directors **and the requester's team lead / manager** (`canReviewRequestOf` in `src/lib/permissions.ts`) |
+| Courses | `/courses` | certification tracker: milestones with phases, per-person % progress, org averages, optional class sessions + attendance |
+| Teams & Org Graph | `/teams`, `/org-graph` | `Team.leadId` grants leads a Member-details view (`/api/teams/[id]/overview`) and management rights over their own team |
 | Expenses | `/expenses` | restricted: Directors/HR or `User.expenseAccess`. Recharts dashboards; scheduled email reports |
-| Expense email reports | `/api/reports/expense/[period]` | Vercel Cron (see `vercel.json`); recipients = `User.receivesExpenseReports`, configured by Directors; `CRON_SECRET` protects the cron endpoints |
-| Projects (JIRA-style tracker) | `/projects` | agile (SCRUM: epics, sprints, story points, Jira keys like `PRD-12`, backlog/board) and waterfall (phases). Issues = extended `Task` model. Board supports drag-and-drop between status columns (native HTML5 DnD, optimistic update, permission-checked); the issue dialog stays open on inline status/progress edits |
-| Assistant | floating chat widget (bottom-right) | rule-based, account-aware Q&A over the signed-in user's own data (`/api/assistant`) |
-| Connectors | `/connectors` | Outlook/Gmail OAuth, per-user |
-| Admin | `/users`, `/approvals`, `/dashboard`, `/audit` | user lifecycle goes through Director approvals; audit log is Director-only |
+| Expense reports | `/api/reports/expense/[period]` | Vercel Cron (`vercel.json`); recipients = `User.receivesExpenseReports` (Directors configure); guarded by `CRON_SECRET` |
+| Projects | `/projects` | JIRA-style: `Project` (key → issue keys like `PRD-12`), `Sprint` (SCRUM), `Phase` (WATERFALL), `Task` = issue (type EPIC/STORY/TASK/BUG, epicId, sprintId, phaseId, storyPoints, acceptanceCriteria). Board is drag-and-drop (native HTML5 DnD, optimistic, permission-checked) |
+| Assistant | floating chat widget | rule-based account-aware Q&A (`/api/assistant`); strictly scoped to the signed-in user's data |
+| Connectors | `/connectors` | Outlook/Gmail OAuth per user |
+| Admin | `/users`, `/approvals`, `/dashboard`, `/audit` | approvals flow for user lifecycle; dashboard cards are clickable drill-downs (`/api/employees/[id]/overview`); audit is Director-only |
 
-Roles: `DIRECTOR`, `ADMIN` (HR), `EMPLOYEE`. Team leads are regular employees/HR who lead a `Team` (or a `Project`); hierarchy permissions flow from `Team.leadId`, `Project.leadId` and `User.managerId`.
+Roles: `DIRECTOR`, `ADMIN` (HR), `EMPLOYEE`. Hierarchy permissions flow from `Team.leadId`, `Project.leadId`, `Project.teamId` and `User.managerId` — see `src/lib/permissions.ts`.
 
 ## Stack
 
 - **Next.js 15** (App Router, `src/` dir, Turbopack), **React 19**, **TypeScript**, **Tailwind v4**
-- **shadcn/ui** components in `src/components/ui` (installed via the v5 CLI: `npx shadcn@latest add <component>`; init used `-b radix -p vega`)
-- **Prisma 6 + PostgreSQL** (schema in `prisma/schema.prisma`)
-- Auth: custom JWT sessions (`jose`) in an httpOnly cookie `ap_session`; passwords `bcryptjs`; middleware in `src/middleware.ts` (edge, verifies the JWT, forces first-login password reset)
-- Email: **Gmail SMTP via nodemailer** (`src/lib/mail.ts`); the user explicitly does NOT want Resend. Without `GMAIL_USER`/`GMAIL_APP_PASSWORD` emails print to the server console
-- Charts: **recharts** (wrappers in `src/components/charts.tsx`)
+- **shadcn/ui** (`src/components/ui`; v5 CLI: `npx shadcn@latest add <component>`; init used `-b radix -p vega`)
+- **Prisma 6 + PostgreSQL**; **jose** JWT sessions in httpOnly cookie `ap_session`; **bcryptjs**; **nodemailer** Gmail SMTP (the user explicitly rejected Resend); **recharts** (`src/components/charts.tsx`)
 
 ## Commands
 
 ```bash
-npm run dev            # dev server (http://localhost:3000)
-npm run build          # production build (must pass before finishing work)
-npm run db:push        # push prisma/schema.prisma to the database
-npm run db:seed        # idempotent demo seed (6 users, 2 certification courses, teams, expenses, projects)
-npm run db:generate    # regenerate prisma client
+npm_config_cache=/d/npm-cache npm install ...   # ALWAYS — C: drive is 100% full
+npm run dev            # dev server on :3000
+npm run build          # production build — must pass before finishing work
+npm run lint           # keep at 0 errors (warnings tolerated but tidy them)
+npm run db:push        # push prisma/schema.prisma
+npm run db:seed        # idempotent demo seed
 ```
 
-Always pass the npm cache location on this machine (C: drive is full):
+## Critical environment facts (do not skip)
 
-```bash
-npm_config_cache=/d/npm-cache npm install ...
-npm_config_cache=/d/npm-cache npx ...
-```
+1. **Dedicated database.** The Postgres server on `localhost:5432` also hosts ANOTHER project of the user's inside the `postgres` database (`a2a_events`, `agent_executions`, `work_orders`, …). `prisma db push` syncs the ENTIRE database it points at — running it with `--accept-data-loss` against `postgres` would destroy that project. `DATABASE_URL` must stay pointed at the dedicated `attendance` database. Before any `db push` that warns, preview with `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script`.
+2. **Kill node before `prisma generate`/`db push`** — the dev server locks `node_modules/.prisma/client/query_engine-windows.dll.node` (EPERM rename errors).
+3. **`.env` holds real secrets** (DB password, Gmail App Password). `.env.example` documents every variable. `DEV_EXPOSE_OTP=true` returns OTPs in API responses only in dev when no mail provider is configured — never set it in production.
+4. **The user edits files between sessions.** Always re-read files before editing; do not assume they match your memory. A formatting watcher may also touch files mid-edit.
+5. Production (`next start`) route-handler `console.log` does NOT reach redirected log files on this Windows setup; dev server logs do.
+6. If pages 500 with "Failed to load chunk" after a production build, the `.next` folder is stale — `rm -rf .next` and restart the dev server.
 
-## Critical environment facts
+## Architecture rules
 
-- **The app uses a dedicated `attendance` database.** The Postgres server on `localhost:5432` also hosts OTHER projects of the user's inside the `postgres` database (`a2a_events`, `agent_executions`, `work_orders`, …). `prisma db push` syncs the ENTIRE database it points at — never run `prisma db push --accept-data-loss` against `postgres`. `DATABASE_URL` in `.env` must stay pointed at `attendance`.
-- `.env` holds the user's real DB password and a real Gmail App Password. `.env.example` documents every variable. `DEV_EXPOSE_OTP=true` returns the OTP in dev API responses only when no mail provider is configured.
-- The dev server locks `node_modules/.prisma/client/query_engine-windows.dll.node` — **stop node processes before `prisma generate`/`db push`** or you get EPERM rename errors.
-- Windows + Git Bash: production (`next start`) route-handler `console.log` does not reach redirected log files; dev server logs do.
-- The user edits files themselves between sessions — **re-read files before editing**.
+- **Authorization is DB-backed on every API call.** `requireUser` (`src/lib/api.ts`) re-reads the user and rejects: inactive accounts, users with `mustResetPassword` (they may only call `/api/auth/change-password`), and role mismatches — it returns a session with the FRESH role. Never trust `session.role` from the JWT for new checks when the DB user is available. Cost: one user query per request — accepted deliberately.
+- **Hierarchy**: HR Admins/Directors act org-wide; team/project leads act only on their own people/projects. Use `src/lib/permissions.ts`: `canManageProject`, `canManageTeamMembers`, `canReviewRequestOf`, `visibleProjectWhere`, `canAccessTeam`.
+- **Project visibility**: HR/Directors see all; others see projects they lead, of their teams, org-wide (`teamId: null`), or assigned to them. Both `/api/projects` and `/api/projects/[id]` enforce it via `visibleProjectWhere`; `/api/issues` GET applies the same rules.
+- All API routes wrap in `handleRoute` (`ApiError` → JSON). Validate inputs, never trust the client, gate every mutation server-side. UI gating (hiding buttons) is UX only.
+- Jira keys: `Project.key` + per-project `seq` → `Task.key` (`PRD-12`), computed as `max(seq)+1`; `Task.key` has a UNIQUE constraint (concurrent creates may 409 — client retries).
+- Client pages are `"use client"`, talk to APIs via `api<T>()` from `src/lib/client.ts` (throws `Error` with the server message), toast with `sonner`. Never import server-only modules into client components; shared labels live in `src/lib/roles.ts` (add new audit actions to BOTH `src/lib/audit.ts` and `AUDIT_ACTION_LABEL`).
+- Dates: UTC-midnight convention (`src/lib/dates.ts`). `serverTodayKey()` is the server's local date. Months are 0-based — never default month params with `||` (January is 0).
+- Every page uses `PageHeader` (`src/components/page-header.tsx`) for title/description/actions alignment. Keep it that way — a scripted regex conversion of headers once corrupted 12 pages and they had to be rewritten by hand. **Never bulk-edit JSX with regex scripts; edit files individually.**
+- Every visible control must do something real: dashboard cards open dialogs, board cards drag, all links resolve. When adding UI, wire the action in the same change.
 
-## Architecture conventions
+## Auth flows
 
-- All API routes: `handleRoute(async () => { … })` from `src/lib/api.ts` (converts `ApiError` → JSON responses). Guards: `requireUser(roles?)`, `requireActiveUser(roles?)`, `requireExpenseAccess()`. Never trust the client — permissions are re-checked server-side in every route.
-- Hierarchy permission rule: HR Admins/Directors can act org-wide; **team/project leads can act on their own people** (e.g. review a leave request from someone in a team they lead). Check `Team.leadId` / `Project.leadId` / `User.managerId` when extending guards.
-- Client pages are `"use client"` and talk to APIs via `api<T>()` from `src/lib/client.ts` (throws `Error` with the server's message). Toast errors with `sonner`. Never import server-only modules (`@/lib/db`, `@/lib/auth`, `@/lib/api`) from client components; shared client-safe labels live in `src/lib/roles.ts`.
-- Dates: calendar days are pinned to **UTC midnight** (`src/lib/dates.ts`: `toKey`/`fromKey`/`serverTodayKey`). Attendance "today" = server-local date. Working days are Mon–Fri.
-- Money: `Float` rupees, formatted with `rupees()` from `src/lib/money.ts`.
-- Audit: every admin-ish action calls `logAudit` (`src/lib/audit.ts`); add new actions to both `src/lib/audit.ts` (constants) and `src/lib/roles.ts` (`AUDIT_ACTION_LABEL`).
-- Jira-style IDs: `Project.key` (e.g. `PRD`) + per-project `seq` → `Task.key` = `PRD-12`, computed on issue creation (`max(seq)+1` per project).
-- Sessions carry `{ userId, email, name, role, mustResetPassword }`; middleware redirects: unauthenticated → `/login`, `mustResetPassword` → `/change-password`, signed-in users away from auth pages.
+- Login → JWT cookie (7d) → middleware protects page routes (`src/middleware.ts`); APIs protect themselves.
+- HR adds user → Director approves → user created with temp password + invite email → `mustResetPassword=true` → forced `/change-password` (middleware for pages, `requireUser` 403 for APIs).
+- Forgot password → hashed 6-digit OTP (5 min, single use, 60s resend throttle) → reset. Login has an in-memory brute-force lockout (5 fails / 15 min / per instance).
 
 ## Deploy (Vercel)
 
-Env vars: `DATABASE_URL` (dedicated hosted DB), `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, optional `CRON_SECRET`, `MS_*`/`GOOGLE_*` OAuth, **leave `DEV_EXPOSE_OTP` unset in production**. `prisma generate` runs on `postinstall`. Push the schema once against the prod URL from a machine with the credentials.
+Env: `DATABASE_URL` (dedicated hosted DB), `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `CRON_SECRET`, optional `MS_*`/`GOOGLE_*`, **no `DEV_EXPOSE_OTP`**. `postinstall` runs `prisma generate`. Push schema once against prod from a machine with credentials. OAuth redirect URIs: `/api/connections/outlook/callback` and `/api/connections/gmail/callback`.
 
 ## Things the user cares about
 
-- Naming: the app is **Org Tracker**. The folder is still `attendance-portal` (don't rename it — their dev server/terminal point at it).
-- No Resend. Gmail only, for now.
-- No `LATE` attendance status.
-- Every visible control must be actionable in production: dashboard summary cards open people lists, employee cards open a drill-down via `/api/employees/[id]/overview` (leads may view their own people), the projects board is drag-and-drop.
-- Progress semantics everywhere: a milestone/step "counts" at 100%; partial percents contribute fractionally.
+- The product is called **Org Tracker**; folder stays `attendance-portal`.
+- Gmail only (no Resend). No LATE attendance status.
+- Production bar, not demo bar: every button works, permissions are real, failures surface as toasts.
+- The user tests continuously and edits data via the UI — demo data in the DB may differ from `seed.ts`; never "fix" their live data by reseeding without asking.

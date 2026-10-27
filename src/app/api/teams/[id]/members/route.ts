@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
+import { canManageTeamMembers } from "@/lib/permissions";
 import { AUDIT, logAudit } from "@/lib/audit";
 
 // POST /api/teams/[id]/members — add or remove a member (admin/director only).
@@ -7,8 +8,13 @@ import { AUDIT, logAudit } from "@/lib/audit";
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return handleRoute(async () => {
     const { id } = await params;
-    const { session } = await requireActiveUser(["ADMIN", "DIRECTOR"]);
+    const { session } = await requireActiveUser();
     const body = await readJson<{ userId?: string; action?: "ADD" | "REMOVE" }>(req);
+    const teamForGuard = await prisma.team.findUnique({ where: { id }, select: { leadId: true } });
+    if (!teamForGuard) throw new ApiError(404, "Team not found.");
+    if (!(await canManageTeamMembers(session, teamForGuard))) {
+      throw new ApiError(403, "Only the team lead, HR or Directors can manage members.");
+    }
     if (!body.userId || (body.action !== "ADD" && body.action !== "REMOVE")) {
       throw new ApiError(400, "userId and action (ADD or REMOVE) are required.");
     }
