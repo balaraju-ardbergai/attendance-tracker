@@ -19,6 +19,7 @@ const ISSUE_SELECT = {
   phase: { select: { id: true, name: true, order: true } },
   epic: { select: { id: true, key: true, title: true } },
   creator: { select: { id: true, name: true } },
+  project: { select: { id: true, key: true, name: true } },
 } as const;
 
 const serialize = (t: { dueDate: Date | null } & Record<string, unknown>) => ({

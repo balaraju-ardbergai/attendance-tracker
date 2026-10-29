@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Crown, IndianRupee, ListTodo, Trash2, UserMinus, UserPlus } from "lucide-react";
+import { ArrowLeft, Crown, IndianRupee, Trash2, UserMinus, UserPlus } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { EmployeeDetailDialog } from "@/components/employee-detail-dialog";
 import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
 import { formatKey } from "@/lib/dates";
@@ -43,7 +44,7 @@ type TeamData = {
   team: { id: string; name: string; description: string | null; leadId: string | null; createdAt: string };
   members: Member[];
   taskStats: { total: number; todo: number; inProgress: number; completed: number };
-  recentTasks: { id: string; title: string; status: string; progress: number; assignee: { id: string; name: string } | null; dueDate: string | null }[];
+  recentTasks: { id: string; title: string; status: string; progress: number; assignee: { id: string; name: string } | null; dueDate: string | null; projectId: string | null }[];
   expenseTotal: number;
   expenseThisMonth: number;
   recentExpenses: { id: string; title: string; amount: number; category: string; date: string }[];
@@ -62,6 +63,8 @@ export default function TeamDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [overviewId, setOverviewId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,7 +78,7 @@ export default function TeamDetailPage() {
     void load();
   }, [load]);
 
-  async function removeMember(userId: string, name: string) {
+  async function removeMember(userId: string) {
     try {
       const result = await api<{ message: string }>(`/api/teams/${teamId}/members`, {
         method: "POST",
@@ -154,11 +157,45 @@ export default function TeamDetailPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Members" value={String(members.length)} />
-        <StatCard label="Tasks" value={`${taskStats.completed}/${taskStats.total} done`} />
-        <StatCard label="Spend (this month)" value={rupees(expenseThisMonth)} />
-        <StatCard label="Spend (all time)" value={rupees(expenseTotal)} />
+        <StatCard label="Members — view all" value={String(members.length)} onClick={() => setMembersOpen(true)} />
+        <StatCard label={`Tasks — ${taskStats.completed}/${taskStats.total} done`} value="Open projects" onClick={() => router.push(`/projects?teamId=${teamId}`)} />
+        <StatCard label="Spend this month — view in Expenses" value={rupees(expenseThisMonth)} onClick={() => router.push(`/expenses?teamId=${teamId}`)} />
+        <StatCard label="Spend all time — view in Expenses" value={rupees(expenseTotal)} onClick={() => router.push(`/expenses?teamId=${teamId}`)} />
       </div>
+
+      <Dialog open={membersOpen} onOpenChange={setMembersOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Team members</DialogTitle>
+            <DialogDescription>
+              {(canManageNow || isLead) ? "Click a person for their full details." : "People on this team."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            {members.map((m) => (
+              <button
+                key={m.id}
+                className="flex w-full items-center gap-2.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/50"
+                onClick={() => {
+                  setMembersOpen(false);
+                  if (canManageNow || isLead) setOverviewId(m.id);
+                  else toast.error("Only the team lead, HR or Directors can view member details.");
+                }}
+              >
+                <Avatar className="h-8 w-8">
+                  {m.pictureUrl && <AvatarImage src={m.pictureUrl} alt={m.name} />}
+                  <AvatarFallback className="text-xs">{initials(m.name)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{m.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{m.email}</p>
+                </div>
+                <Badge variant="outline" className="text-[10px]">{ROLE_LABEL[m.role as keyof typeof ROLE_LABEL] ?? m.role}</Badge>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Team graph — member grid */}
       <Card>
@@ -177,7 +214,15 @@ export default function TeamDetailPage() {
               {members.map((m) => {
                 const isLead = team.leadId === m.id;
                 return (
-                  <div key={m.id} className={cn("flex items-center gap-3 rounded-lg border p-3", isLead && "border-amber-500/50 bg-amber-500/5")}>
+                  <div
+                    key={m.id}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg border p-3 transition-colors",
+                      isLead && "border-amber-500/50 bg-amber-500/5",
+                      (canManageNow || isLead) && "cursor-pointer hover:bg-muted/50",
+                    )}
+                    onClick={() => (canManageNow || isLead) && setOverviewId(m.id)}
+                  >
                     <Avatar className="h-9 w-9">
                       {m.pictureUrl && <AvatarImage src={m.pictureUrl} alt={m.name} />}
                       <AvatarFallback className="text-xs">{initials(m.name)}</AvatarFallback>
@@ -199,7 +244,7 @@ export default function TeamDetailPage() {
                             <Crown className="h-4 w-4 text-muted-foreground" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-600 hover:text-rose-600" title="Remove" onClick={() => removeMember(m.id, m.name)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-600 hover:text-rose-600" title="Remove" onClick={() => removeMember(m.id)}>
                           <UserMinus className="h-4 w-4" />
                         </Button>
                       </div>
@@ -212,7 +257,7 @@ export default function TeamDetailPage() {
         </CardContent>
       </Card>
 
-      {(canManageNow || isLead) && <MemberDetailsSection teamId={teamId} />}
+      {(canManageNow || isLead) && <MemberDetailsSection teamId={teamId} onOpenMember={setOverviewId} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -223,16 +268,20 @@ export default function TeamDetailPage() {
           <CardContent className="space-y-2">
             {recentTasks.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No tasks for this team yet.</p>}
             {recentTasks.map((t) => (
-              <div key={t.id} className="flex items-center gap-3 rounded-md border p-2.5 text-sm">
+              <Link
+                key={t.id}
+                href={t.projectId ? `/projects/${t.projectId}?issue=${t.id}` : "/projects"}
+                className="flex items-center gap-3 rounded-md border p-2.5 text-sm transition-colors hover:bg-muted/50"
+              >
                 <span className="min-w-0 flex-1 truncate">{t.title}</span>
                 <span className="text-xs text-muted-foreground">{t.assignee?.name ?? "Unassigned"}</span>
                 <Badge variant="outline" className={cn(t.status === "COMPLETED" ? "border-emerald-500/50 text-emerald-600" : t.status === "IN_PROGRESS" ? "border-amber-500/50 text-amber-600" : "text-muted-foreground")}>
                   {TASK_STATUS_LABEL[t.status]}
                 </Badge>
-              </div>
+              </Link>
             ))}
             <Button asChild variant="ghost" size="sm" className="w-full">
-              <Link href="/projects">Open projects →</Link>
+              <Link href={`/projects?teamId=${teamId}`}>Open projects →</Link>
             </Button>
           </CardContent>
         </Card>
@@ -246,15 +295,19 @@ export default function TeamDetailPage() {
           <CardContent className="space-y-2">
             {recentExpenses.length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No expenses recorded for this team.</p>}
             {recentExpenses.map((e) => (
-              <div key={e.id} className="flex items-center gap-3 rounded-md border p-2.5 text-sm">
+              <Link
+                key={e.id}
+                href={`/expenses?teamId=${teamId}`}
+                className="flex items-center gap-3 rounded-md border p-2.5 text-sm transition-colors hover:bg-muted/50"
+              >
                 <IndianRupee className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate">{e.title}</span>
                 <span className="hidden text-xs text-muted-foreground sm:inline">{EXPENSE_CATEGORY_LABEL[e.category]} · {formatKey(e.date)}</span>
                 <span className="font-semibold">{rupees(e.amount)}</span>
-              </div>
+              </Link>
             ))}
             <Button asChild variant="ghost" size="sm" className="w-full">
-              <Link href="/expenses">Open expenses →</Link>
+              <Link href={`/expenses?teamId=${teamId}`}>Open expenses →</Link>
             </Button>
           </CardContent>
         </Card>
@@ -274,6 +327,8 @@ export default function TeamDetailPage() {
         />
       )}
 
+      <EmployeeDetailDialog employeeId={overviewId} onClose={() => setOverviewId(null)} />
+
       {canManageNow && (
         <EditTeamDialog
           open={editOpen}
@@ -290,9 +345,32 @@ export default function TeamDetailPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+}) {
   return (
-    <Card>
+    <Card
+      className={cn("transition-all", onClick && "cursor-pointer hover:shadow-md hover:ring-1 hover:ring-primary/30")}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+    >
       <CardContent className="p-4">
         <div className="text-lg font-semibold">{value}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
@@ -465,11 +543,11 @@ type OverviewMember = {
   pictureUrl: string | null;
   attendance: { workingDays: number; present: number; leave: number; wfh: number; absent: number };
   pendingRequests: { type: string; startDate: string; endDate: string }[];
-  openTasks: { id: string; key: string | null; title: string; status: string; progress: number; dueDate: string | null }[];
-  courses: { name: string; percent: number }[];
+  openTasks: { id: string; key: string | null; title: string; status: string; progress: number; dueDate: string | null; projectId: string | null }[];
+  courses: { id: string; name: string; percent: number }[];
 };
 
-function MemberDetailsSection({ teamId }: { teamId: string }) {
+function MemberDetailsSection({ teamId, onOpenMember }: { teamId: string; onOpenMember: (id: string) => void }) {
   const [members, setMembers] = useState<OverviewMember[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -497,7 +575,7 @@ function MemberDetailsSection({ teamId }: { teamId: string }) {
         ) : (
           <div className="space-y-3">
             {members.map((m) => (
-              <div key={m.id} className="rounded-lg border p-3">
+              <div key={m.id} className="cursor-pointer rounded-lg border p-3 transition-colors hover:bg-muted/50" onClick={() => onOpenMember(m.id)}>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <Avatar className="h-8 w-8">
                     {m.pictureUrl && <AvatarImage src={m.pictureUrl} alt={m.name} />}
@@ -529,7 +607,14 @@ function MemberDetailsSection({ teamId }: { teamId: string }) {
                   <div>
                     <p className="font-medium text-foreground">Open tasks ({m.openTasks.length})</p>
                     {m.openTasks.slice(0, 2).map((t) => (
-                      <p key={t.id} className="truncate">{t.key ? `${t.key}: ` : ""}{t.title} ({t.progress}%)</p>
+                      <Link
+                        key={t.id}
+                        href={t.projectId ? `/projects/${t.projectId}?issue=${t.id}` : "/projects"}
+                        className="block truncate underline-offset-2 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {t.key ? `${t.key}: ` : ""}{t.title} ({t.progress}%)
+                      </Link>
                     ))}
                     {m.openTasks.length > 2 && <p>+{m.openTasks.length - 2} more</p>}
                     {m.openTasks.length === 0 && <p>None</p>}
@@ -538,10 +623,15 @@ function MemberDetailsSection({ teamId }: { teamId: string }) {
                 {m.courses.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {m.courses.map((c) => (
-                      <span key={c.name} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px]">
+                      <Link
+                        key={c.id}
+                        href={`/courses/${c.id}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors hover:bg-muted/50"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {c.name}
                         <span className="font-semibold text-foreground">{c.percent}%</span>
-                      </span>
+                      </Link>
                     ))}
                   </div>
                 )}

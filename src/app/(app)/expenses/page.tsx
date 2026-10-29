@@ -106,6 +106,19 @@ export default function ExpensesPage() {
     }
   }, []);
 
+  const [teamParam, setTeamParam] = useState<string | null>(null);
+  useEffect(() => {
+    // One-shot deep link (?teamId=) — read from the URL on mount.
+    setTeamParam(new URLSearchParams(window.location.search).get("teamId"));
+  }, []);
+
+  // Apply the ?teamId= deep link once teams have loaded.
+  useEffect(() => {
+    if (teamParam && teams.length > 0 && fTeam === "ALL") {
+      if (teams.some((t) => t.id === teamParam)) setFTeam(teamParam);
+    }
+  }, [teamParam, teams, fTeam]);
+
   const loadExpenses = useCallback(async () => {
     const params = new URLSearchParams();
     if (fCategory !== "ALL") params.set("category", fCategory);
@@ -190,7 +203,11 @@ export default function ExpensesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Expenses"
-        description="Vendor & client billings, office purchases and event spends — all in one place."
+        description={
+          fTeam !== "ALL" && teams.find((t) => t.id === fTeam)
+            ? `Team spend for ${teams.find((t) => t.id === fTeam)!.name} — vendor billings, office purchases and event spends.`
+            : "Vendor & client billings, office purchases and event spends — all in one place."
+        }
       >
         <Button
           onClick={() => {

@@ -101,7 +101,7 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   EXPENSE_DELETED: "Deleted an expense",
   EXPENSE_ACCESS_GRANTED: "Granted expense access",
   EXPENSE_ACCESS_REVOKED: "Revoked expense access",
-  REPORT_SENT: "Sent an expense report",
+    
   REPORT_RECIPIENT_UPDATED: "Updated report recipients",
   TEAM_CREATED: "Created a team",
   TEAM_UPDATED: "Updated a team",
@@ -121,6 +121,10 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   PHASE_CREATED: "Created a phase",
   PHASE_UPDATED: "Updated a phase",
   PHASE_DELETED: "Deleted a phase",
+  PROFILE_SELF_UPDATED: "Updated personal profile",
+  SKILL_ADDED: "Added a skill",
+  SKILL_UPDATED: "Updated a skill",
+  SKILL_REMOVED: "Removed a skill",
 };
 
 // Status colors used by badges, the month grid and the combined stat bar.

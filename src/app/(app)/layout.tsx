@@ -15,6 +15,7 @@ import {
   LogOut,
   Network,
   Plug,
+  UserRound,
   Users,
   Users2,
   Wallet,
@@ -44,6 +45,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Work",
     items: [
+      { href: "/profile", label: "My Profile", icon: UserRound },
       { href: "/attendance", label: "Attendance", icon: CalendarCheck },
       { href: "/requests", label: "Requests", icon: ClipboardList },
       { href: "/projects", label: "Projects", icon: FolderKanban },
@@ -183,15 +185,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     ));
 
   const userBlock = (
-    <div className="flex items-center gap-3 rounded-xl border bg-card p-2.5 shadow-sm">
-      <Avatar className="h-9 w-9">
-        {user.pictureUrl && <AvatarImage src={user.pictureUrl} alt={user.name} />}
-        <AvatarFallback className="text-xs">{initials(user.name)}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium leading-tight">{user.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-      </div>
+    <div className="flex items-center gap-1 rounded-xl border bg-card p-1.5 shadow-sm">
+      <Link
+        href="/profile"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 transition-colors hover:bg-muted/60"
+        title="Open My Profile"
+      >
+        <Avatar className="h-9 w-9">
+          {user.pictureUrl && <AvatarImage src={user.pictureUrl} alt={user.name} />}
+          <AvatarFallback className="text-xs">{initials(user.name)}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium leading-tight">{user.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+        </div>
+      </Link>
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" onClick={signOut} title="Sign out" aria-label="Sign out">
         <LogOut className="h-4 w-4" />
       </Button>

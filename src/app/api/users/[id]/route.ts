@@ -112,9 +112,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.MANAGER_SET, details: { email: target.email, manager: null } });
           return ok({ message: `${target.name} has no manager assigned.` });
         }
-        const manager = await prisma.user.findUnique({ where: { id: body.managerId! } });
+        const manager = await prisma.user.findUnique({ where: { id: body.managerId! }, select: { id: true, name: true, managerId: true, isActive: true } });
         if (!manager || !manager.isActive) throw new ApiError(400, "Manager not found or inactive.");
         if (manager.id === target.id) throw new ApiError(400, "A person cannot be their own manager.");
+        // Cycle guard: walking up from the proposed manager must never reach the
+        // person being moved, or the reporting tree would loop.
+        let cursor: string | null = manager.managerId ?? null;
+        let guard = 0;
+        while (cursor && guard++ < 100) {
+          if (cursor === target.id) {
+            throw new ApiError(400, `That would create a loop — ${target.name} is already in ${manager.name}'s management chain.`);
+          }
+          const up = await prisma.user.findUnique({ where: { id: cursor }, select: { managerId: true } });
+          cursor = up?.managerId ?? null;
+        }
         await prisma.user.update({ where: { id }, data: { managerId: manager.id } });
         await logAudit({ actorId: session.userId, targetUserId: id, action: AUDIT.MANAGER_SET, details: { email: target.email, manager: manager.name } });
         return ok({ message: `${manager.name} is now ${target.name}'s manager.` });

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, requireActiveUser } from "@/lib/api";
-import { isManagerRole } from "@/lib/permissions";
+import { canViewEmployeeOverview } from "@/lib/permissions";
 import { computeMonthStats, fromKey, serverTodayKey, toKey } from "@/lib/dates";
 
 // GET /api/employees/[id]/overview — drill-down for the org dashboard:
@@ -17,17 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     });
     if (!person) throw new ApiError(404, "Person not found.");
 
-    if (!isManagerRole(session.role)) {
-      // Team leads / managers may view their own people.
-      let allowed = person.managerId === session.userId;
-      if (!allowed) {
-        const membership = await prisma.teamMember.findFirst({
-          where: { userId: id, team: { leadId: session.userId } },
-          select: { id: true },
-        });
-        allowed = Boolean(membership);
-      }
-      if (!allowed) throw new ApiError(403, "You can only view details of your own team members.");
+    if (!(await canViewEmployeeOverview(session, id))) {
+      throw new ApiError(403, "You can only view your own details or those of your team members.");
     }
 
     const now = new Date();
@@ -45,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }),
       prisma.task.findMany({
         where: { assigneeId: id, status: { not: "COMPLETED" } },
-        select: { id: true, key: true, title: true, status: true, progress: true, dueDate: true },
+        select: { id: true, key: true, title: true, status: true, progress: true, dueDate: true, projectId: true },
         orderBy: [{ dueDate: "asc" }, { updatedAt: "desc" }],
       }),
       prisma.milestoneProgress.findMany({

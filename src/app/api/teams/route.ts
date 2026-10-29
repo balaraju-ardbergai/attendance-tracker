@@ -5,7 +5,8 @@ import { AUDIT, logAudit } from "@/lib/audit";
 // GET /api/teams — all teams with lead, member count, task and expense totals.
 export async function GET() {
   return handleRoute(async () => {
-    await requireActiveUser();
+    const { user } = await requireActiveUser();
+    const canSeeExpenses = user.role === "DIRECTOR" || user.role === "ADMIN" || user.expenseAccess;
     const teams = await prisma.team.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -15,11 +16,13 @@ export async function GET() {
       },
     });
 
-    const expenseTotals = await prisma.expense.groupBy({
-      by: ["teamId"],
-      _sum: { amount: true },
-      where: { teamId: { not: null } },
-    });
+    const expenseTotals = canSeeExpenses
+      ? await prisma.expense.groupBy({
+          by: ["teamId"],
+          _sum: { amount: true },
+          where: { teamId: { not: null } },
+        })
+      : [];
     const totalByTeam = new Map(expenseTotals.map((t) => [t.teamId, t._sum.amount ?? 0]));
 
     const taskRows = await prisma.task.groupBy({
@@ -45,8 +48,8 @@ export async function GET() {
         creator: t.creator,
         memberCount: t._count.members,
         taskCount: t._count.tasks,
-        expenseCount: t._count.expenses,
-        expenseTotal: totalByTeam.get(t.id) ?? 0,
+        expenseCount: canSeeExpenses ? t._count.expenses : null,
+        expenseTotal: canSeeExpenses ? (totalByTeam.get(t.id) ?? 0) : null,
         tasksCompleted: tasksByTeam.get(t.id)?.completed ?? 0,
       })),
     });

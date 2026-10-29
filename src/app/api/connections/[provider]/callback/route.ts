@@ -34,6 +34,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   if (!userId) return back(origin, "error", provider);
   if (oauthError || !code) return back(origin, "error", provider);
 
+  // State can remain valid for 10 minutes; ensure the account was not removed
+  // or deactivated after the OAuth flow began.
+  const activeUser = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, isActive: true, mustResetPassword: true } });
+  if (!activeUser || !activeUser.isActive || activeUser.mustResetPassword) {
+    return back(origin, "error", provider);
+  }
+
   const config = providerConfig(provider);
   const redirectUri = `${origin}/api/connections/${provider}/callback`;
 

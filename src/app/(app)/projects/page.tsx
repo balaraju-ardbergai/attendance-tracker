@@ -61,9 +61,24 @@ export default function ProjectsPage() {
   const me = useUser();
   const canCreate = me?.role === "ADMIN" || me?.role === "DIRECTOR" || me?.isTeamLead;
 
+  const [teamParam, setTeamParam] = useState<string | null>(null);
+  useEffect(() => {
+    // One-shot deep link (?teamId=) — read from the URL on mount.
+    setTeamParam(new URLSearchParams(window.location.search).get("teamId"));
+  }, []);
+  const [teamFilter, setTeamFilter] = useState("ALL");
   const [projects, setProjects] = useState<ProjectListItem[] | null>(null);
   const [myIssues, setMyIssues] = useState<IssueDto[] | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+
+  // Deep link ?teamId= selects the team filter (validated once data loads).
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
+  useEffect(() => {
+    if (teamParam && projects && !teamsLoaded) {
+      setTeamFilter(projects.some((p) => p.team?.id === teamParam) ? teamParam : "ALL");
+      setTeamsLoaded(true);
+    }
+  }, [teamParam, projects, teamsLoaded]);
 
   const load = useCallback(async () => {
     try {
@@ -104,6 +119,21 @@ export default function ProjectsPage() {
         )}
       </PageHeader>
 
+      <div className="flex items-center gap-2">
+        <Select value={teamFilter} onValueChange={setTeamFilter}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All teams</SelectItem>
+            {(projects ?? [])
+              .map((p) => p.team)
+              .filter((t, i, arr): t is { id: string; name: string } => t !== null && arr.findIndex((x) => x?.id === t.id) === i)
+              .map((t) => (
+                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Tabs defaultValue="projects">
         <TabsList>
           <TabsTrigger value="projects">Projects</TabsTrigger>
@@ -126,7 +156,9 @@ export default function ProjectsPage() {
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {projects.map((p) => (
+              {projects
+                .filter((p) => teamFilter === "ALL" || p.team?.id === teamFilter)
+                .map((p) => (
                 <Card
                   key={p.id}
                   className="cursor-pointer transition-shadow hover:shadow-md"

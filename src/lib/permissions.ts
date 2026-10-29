@@ -66,6 +66,29 @@ export async function canManageTeamMembers(
   return isManagerRole(session.role) || team.leadId === session.userId;
 }
 
+/**
+ * Can this session view the employee's operational overview?
+ * Self, HR/Directors, direct manager and any lead of a team containing the
+ * employee are allowed. Keep this shared so dashboards/teams/profile do not
+ * drift into different privacy rules.
+ */
+export async function canViewEmployeeOverview(
+  session: { userId: string; role: AppRole },
+  employeeId: string,
+): Promise<boolean> {
+  if (session.userId === employeeId || isManagerRole(session.role)) return true;
+  const employee = await prisma.user.findUnique({
+    where: { id: employeeId },
+    select: { managerId: true },
+  });
+  if (employee?.managerId === session.userId) return true;
+  const membership = await prisma.teamMember.findFirst({
+    where: { userId: employeeId, team: { leadId: session.userId } },
+    select: { id: true },
+  });
+  return Boolean(membership);
+}
+
 /** Can this session review (approve/reject) a request made by `requesterId`? */
 export async function canReviewRequestOf(
   session: { userId: string; role: AppRole },

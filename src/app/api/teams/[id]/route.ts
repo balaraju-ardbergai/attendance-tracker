@@ -13,7 +13,8 @@ async function loadTeam(id: string) {
 // GET /api/teams/[id] — team graph data: members, task breakdown, expense spend.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return handleRoute(async () => {
-    await requireActiveUser();
+    const { user } = await requireActiveUser();
+    const canSeeExpenses = user.role === "DIRECTOR" || user.role === "ADMIN" || user.expenseAccess;
     const { id } = await params;
     const team = await loadTeam(id);
 
@@ -28,21 +29,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         include: { assignee: { select: { id: true, name: true } } },
         orderBy: { updatedAt: "desc" },
       }),
-      prisma.expense.findMany({
-        where: { teamId: id },
-        orderBy: { date: "desc" },
-        take: 10,
-        select: { id: true, title: true, amount: true, category: true, date: true },
-      }),
+      canSeeExpenses
+        ? prisma.expense.findMany({
+            where: { teamId: id },
+            orderBy: { date: "desc" },
+            take: 10,
+            select: { id: true, title: true, amount: true, category: true, date: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const now = new Date();
     const monthStartKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const expenseTotal = await prisma.expense.aggregate({ where: { teamId: id }, _sum: { amount: true } });
-    const expenseMonth = await prisma.expense.aggregate({
-      where: { teamId: id, date: { gte: new Date(`${monthStartKey}T00:00:00.000Z`) } },
-      _sum: { amount: true },
-    });
+    const expenseTotal = canSeeExpenses
+      ? await prisma.expense.aggregate({ where: { teamId: id }, _sum: { amount: true } })
+      : null;
+    const expenseMonth = canSeeExpenses
+      ? await prisma.expense.aggregate({
+          where: { teamId: id, date: { gte: new Date(`${monthStartKey}T00:00:00.000Z`) } },
+          _sum: { amount: true },
+        })
+      : null;
 
     return ok({
       team: {
@@ -66,10 +73,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         progress: t.progress,
         assignee: t.assignee,
         dueDate: t.dueDate ? toKey(t.dueDate) : null,
+        projectId: t.projectId,
       })),
-      expenseTotal: expenseTotal._sum.amount ?? 0,
-      expenseThisMonth: expenseMonth._sum.amount ?? 0,
-      recentExpenses: expenses.map((e) => ({ ...e, date: toKey(e.date) })),
+      expenseTotal: expenseTotal?._sum.amount ?? null,
+      expenseThisMonth: expenseMonth?._sum.amount ?? null,
+      recentExpenses: canSeeExpenses ? expenses.map((e) => ({ ...e, date: toKey(e.date) })) : null,
     });
   });
 }

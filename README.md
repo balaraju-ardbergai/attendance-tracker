@@ -134,3 +134,49 @@ vercel.json            # weekly + monthly report crons
 | `npm run db:push` | push the Prisma schema to the database |
 | `npm run db:seed` | (re)seed demo data (idempotent) |
 | `npm run db:generate` | regenerate the Prisma client |
+
+## Entity relationships & dynamic navigation
+
+Org Tracker is relational rather than a collection of isolated pages. `User.managerId` builds the draggable Org Graph; `TeamMember` joins people to `Team`; teams connect to projects, issues and expenses; courses connect through enrollment, milestones and progress; Scrum and Waterfall both use the same issue (`Task`) model through `Sprint` and `Phase`.
+
+Key dynamic flows:
+- Drag a person onto another person in **Org Graph** to change their manager (cycle-safe); drop onto the top-level tray to remove their manager.
+- Team stats, members, tasks, courses and expenses are clickable and deep-link to filtered details.
+- Project issue links use `/projects/[projectId]?issue=[issueId]`; team expense links use `/expenses?teamId=[teamId]`; project lists accept `/projects?teamId=[teamId]`.
+- Epics filter the backlog, sprint pills open issues, and board cards drag between statuses.
+
+The full ER map and action paths are documented in **AGENTS.md**.
+
+## My Profile / employee self-service
+
+`/profile` is the signed-in employee hub, inspired by the publicly described employee self-service principles in Workday — personalized attention items, quick actions, profile maintenance, time/absence, learning and permission-aware account information. It is an Org Tracker design, not a reproduction of Workday branding or proprietary tenant UI.
+
+Tabs:
+
+- **Overview** — needs-attention items, quick actions, today's attendance, monthly attendance, manager/teams, recent requests, open Jira work and course progress.
+- **Personal information** — employee-owned preferred name, phone, pronouns, location, timezone, bio and emergency contact. Legal name, work email, department, role, manager and access flags are read-only and managed by HR.
+- **Career & learning** — employee-confirmed skills (1–5 proficiency + evidence), all enrolled courses including zero-progress courses, current milestones, completion and upcoming class sessions, plus leadership responsibilities.
+- **Account & connections** — role/access summary, Gmail/Outlook connection status, account creation date and password-change action.
+
+Security and privacy:
+
+- `GET/PATCH /api/profile` derives identity exclusively from the active session and uses the DB-backed authorization guard.
+- The PATCH allowlist rejects attempts to change HR-owned fields (role, email, department, manager, active state, expense/report permissions).
+- Skills use normalized `Skill` + `UserSkill` tables and can only be edited by their owner through `/api/profile/skills`.
+- `/api/employees/[id]/overview` supports self access; viewing another person still requires HR/Director, direct-manager or team-lead authorization.
+- Team APIs omit all expense totals/records for people without expense access.
+- Employee course detail returns only that employee's participant/progress row and own session attendance; HR/Directors retain the complete tracker.
+- OAuth callbacks re-check that the state-bound user still exists, is active and has completed first-login password reset.
+
+Workday public references used for feature research:
+
+- [Employee Experience](https://www.workday.com/en-us/products/human-resource-management/employee-experience.html)
+- [Workday Mobile](https://www.workday.com/en-us/products/platform-product-extensions/workday-mobile.html)
+- [Time Tracking](https://www.workday.com/en-us/products/workforce-management/time.html)
+- [Absence](https://www.workday.com/en-us/products/workforce-management/absence.html)
+- [Skills Cloud](https://www.workday.com/en-us/products/human-resource-management/skills-cloud.html)
+- [Talent Optimization](https://www.workday.com/en-us/products/talent-management/talent-optimization.html)
+- [Learning](https://www.workday.com/en-us/products/talent-management/learning.html)
+- [Organizational Management](https://www.workday.com/en-us/products/human-resource-management/organizational-management.html)
+
+Pay, tax, compensation and benefits were deliberately not faked. Those features require an authoritative payroll/benefits provider and a separate compliance design.

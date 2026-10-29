@@ -33,7 +33,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
 import { RequestDialog } from "@/components/request-dialog";
 import { useUser } from "@/components/user-context";

@@ -75,3 +75,74 @@ Env: `DATABASE_URL` (dedicated hosted DB), `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL`,
 - Gmail only (no Resend). No LATE attendance status.
 - Production bar, not demo bar: every button works, permissions are real, failures surface as toasts.
 - The user tests continuously and edits data via the UI — demo data in the DB may differ from `seed.ts`; never "fix" their live data by reseeding without asking.
+
+## Entity relation map (how actions connect)
+
+```text
+User
+├─ managerId ───────────────► User (self relation: reports / direct reports)
+├─ teamMemberships ─────────► TeamMember ◄──────── Team
+│                                               ├─ leadId ─► User
+│                                               ├─ projects ─► Project
+│                                               ├─ tasks ────► Task
+│                                               └─ expenses ─► Expense
+├─ coursesCreated ──────────► Course
+├─ courseEnrollments ───────► CourseEnrollment ◄── Course
+├─ milestoneProgress ───────► MilestoneProgress ◄─ Milestone ◄─ Course
+├─ courseAttendances ───────► CourseAttendance ◄── CourseSession ◄─ Course
+├─ attendance ──────────────► Attendance
+├─ requests ────────────────► Request (reviewedBy ─► User)
+├─ approvalsRequested ──────► Approval (reviewedBy ─► User)
+├─ expensesCreated ─────────► Expense
+├─ tasksAssigned ───────────► Task
+└─ projectsLed ─────────────► Project
+
+Project
+├─ teamId ─► Team          (visibility + assignee pool)
+├─ leadId ─► User          (project/Scrum lead rights)
+├─ sprints ─► Sprint ──────► Task.sprintId   (SCRUM)
+├─ phases ──► Phase ───────► Task.phaseId    (WATERFALL)
+└─ tasks ───► Task
+             ├─ key (PRD-12, unique)
+             ├─ epicId ─► Task(type=EPIC) (self relation)
+             ├─ assigneeId ─► User
+             └─ teamId ─► Team
+```
+
+### Dynamic action paths
+
+- **Org Graph drag:** `PATCH /api/users/[id] { action: SET_MANAGER, managerId }`; server walks the proposed manager's full chain and rejects cycles. Dropping in the top-level tray sends `managerId: null`.
+- **Team page:** member/stat click → `EmployeeDetailDialog` → `/api/employees/[id]/overview`; task click → `/projects/[projectId]?issue=[taskId]`; course chip → `/courses/[courseId]`; expense/stat click → `/expenses?teamId=[id]`; project/stat click → `/projects?teamId=[id]`.
+- **Project workspace:** `?issue=` auto-opens the issue dialog; epic clicks filter the backlog; sprint issue pills open the issue; board drag PATCHes issue status optimistically.
+- **Dashboard:** summary cards → filtered people dialog; people/employee cards → the same reusable EmployeeDetailDialog.
+
+## My Profile architecture
+
+Models:
+
+```text
+User 1 ── 0..1 UserProfile
+User * ── * Skill (through UserSkill)
+```
+
+`UserProfile` holds employee-owned self-service fields only: preferred name, phone, pronouns, location, timezone, bio and emergency contact. `User` continues to hold HR-owned identity/employment/access fields. Never move role, work email, department, manager, active/reset state or expense/report permissions into the self-edit allowlist.
+
+Endpoints:
+
+- `GET /api/profile` — bounded self-service aggregation: identity, manager/teams/leadership, attendance, recent requests, open work, every enrolled course (zero-progress included), skills, connectors, capabilities and action-center counts.
+- `PATCH /api/profile` — explicit allowlist, validation and `PROFILE_SELF_UPDATED` audit.
+- `POST/PATCH/DELETE /api/profile/skills` — owner-only skill management, proficiency 1–5, audited.
+- `GET /api/employees/[id]/overview` — shared drill-down; permission uses `canViewEmployeeOverview` (self, HR/Director, direct manager, team lead).
+
+Privacy rules added with profile work:
+
+- `/api/teams` and `/api/teams/[id]` must not query or return financial totals/records unless the caller has effective expense access.
+- Non-manager `/api/courses/[id]` responses contain only the caller's participant/progress row and own course-session attendance; org milestone aggregates remain visible.
+- OAuth callback must verify the signed state user is still active and has completed password reset before writing a connection.
+- `GET /api/issues?scope=mine` includes project identity for usable deep links.
+
+UI:
+
+- Route: `/profile`; explicit sidebar/mobile nav item; sidebar identity block also links there.
+- Tabs: Overview, Personal information, Career & learning, Account & connections.
+- Use `PageHeader`, existing StatBar/deep-link patterns and shadcn primitives. Do not invent payroll, payslip, tax or benefits data without an authoritative integration.

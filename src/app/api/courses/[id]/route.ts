@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const [milestones, enrollments, sessions] = await Promise.all([
       prisma.milestone.findMany({ where: { courseId: id }, orderBy: { order: "asc" } }),
       prisma.courseEnrollment.findMany({
-        where: { courseId: id },
+        where: { courseId: id, ...(isManager ? {} : { userId: session.userId }) },
         include: {
           user: { select: { id: true, name: true, email: true, department: true, pictureUrl: true, role: true } },
         },
@@ -44,7 +44,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ]);
 
     const progressRows = await prisma.milestoneProgress.findMany({
-      where: { milestone: { courseId: id } },
+      where: {
+        milestone: { courseId: id },
+        ...(isManager ? {} : { userId: session.userId }),
+      },
       select: { milestoneId: true, userId: true, percent: true },
     });
 
@@ -113,7 +116,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       milestones,
       milestoneStats,
       participants,
-      sessions,
+      sessions: isManager
+        ? sessions
+        : sessions.map((sessionRow) => ({
+            ...sessionRow,
+            attendance: sessionRow.attendance.filter((row) => row.userId === session.userId),
+          })),
       canManage: isManager,
     });
   });

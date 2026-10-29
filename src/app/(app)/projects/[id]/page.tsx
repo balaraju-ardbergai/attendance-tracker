@@ -86,6 +86,13 @@ export default function ProjectWorkspacePage() {
   const [boardScope, setBoardScope] = useState<string>("active");
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [deepLinkId, setDeepLinkId] = useState<string | null>(null);
+  const [epicFilter, setEpicFilter] = useState<string>("ALL");
+
+  useEffect(() => {
+    const issueParam = new URLSearchParams(window.location.search).get("issue");
+    if (issueParam) setDeepLinkId(issueParam);
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -98,6 +105,17 @@ export default function ProjectWorkspacePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Deep link: open the referenced issue dialog once its data is available.
+  useEffect(() => {
+    if (deepLinkId && data) {
+      const issue = data.issues.find((i) => i.id === deepLinkId);
+      if (issue) {
+        setDetail(issue);
+        setDeepLinkId(null);
+      }
+    }
+  }, [deepLinkId, data]);
 
   if (error) {
     return (
@@ -173,6 +191,9 @@ export default function ProjectWorkspacePage() {
     }
   }
 
+  const epicFiltered =
+    epicFilter === "ALL" ? workItems : epicFilter === "NONE" ? workItems.filter((i) => !i.epicId) : workItems.filter((i) => i.epicId === epicFilter);
+
   const epicProgress = (epicId: string) => {
     const children = workItems.filter((i) => i.epicId === epicId);
     return children.length ? Math.round(children.reduce((s, i) => s + i.progress, 0) / children.length) : 0;
@@ -224,7 +245,7 @@ export default function ProjectWorkspacePage() {
                 {epics.map((e) => {
                   const pct = epicProgress(e.id);
                   return (
-                    <button key={e.id} className="rounded-lg border p-3 text-left transition-colors hover:bg-muted/50" onClick={() => setDetail(e)}>
+                    <button key={e.id} className="rounded-lg border p-3 text-left transition-colors hover:bg-muted/50" onClick={() => setEpicFilter(e.id)} title="Show this epic's issues in the backlog">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-mono text-xs text-muted-foreground">{e.key}</span>
                         <span className="text-sm font-semibold">{pct}%</span>
@@ -243,11 +264,36 @@ export default function ProjectWorkspacePage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">All issues</CardTitle>
-              <CardDescription>{workItems.length} issue(s) · story points total {workItems.reduce((s, i) => s + (i.storyPoints ?? 0), 0)}</CardDescription>
+              <CardDescription>{epicFiltered.length} issue(s) · story points total {epicFiltered.reduce((s, i) => s + (i.storyPoints ?? 0), 0)}</CardDescription>
             </CardHeader>
             <CardContent>
+              {epics.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-1.5">
+                  <button
+                    className={cn("rounded-full border px-3 py-1 text-xs transition-colors", epicFilter === "ALL" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
+                    onClick={() => setEpicFilter("ALL")}
+                  >
+                    All
+                  </button>
+                  <button
+                    className={cn("rounded-full border px-3 py-1 text-xs transition-colors", epicFilter === "NONE" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
+                    onClick={() => setEpicFilter("NONE")}
+                  >
+                    No epic
+                  </button>
+                  {epics.map((e) => (
+                    <button
+                      key={e.id}
+                      className={cn("rounded-full border px-3 py-1 text-xs transition-colors", epicFilter === e.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}
+                      onClick={() => setEpicFilter(e.id)}
+                    >
+                      {e.key} · {e.title}
+                    </button>
+                  ))}
+                </div>
+              )}
               <IssueTable
-                issues={workItems}
+                issues={epicFiltered}
                 canManage={canManage}
                 meId={me?.id ?? ""}
                 onOpen={setDetail}
@@ -373,6 +419,7 @@ export default function ProjectWorkspacePage() {
               sprints={sprints}
               issues={workItems}
               canManage={canManage}
+              onOpenIssue={(issue) => setDetail(issue)}
               onChanged={load}
               projectId={projectId}
             />
@@ -556,13 +603,14 @@ function IssueTable({
 /* --------------------------------- Sprint list --------------------------------- */
 
 function SprintList({
-  sprints, issues, canManage, onChanged, projectId,
+  sprints, issues, canManage, onChanged, projectId, onOpenIssue,
 }: {
   sprints: Sprint[];
   issues: Issue[];
   canManage: boolean;
   onChanged: () => void;
   projectId: string;
+  onOpenIssue: (issue: Issue) => void;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -624,10 +672,15 @@ function SprintList({
             {sprintIssues.length > 0 && (
               <CardContent className="flex flex-wrap gap-1.5">
                 {sprintIssues.map((i) => (
-                  <span key={i.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs">
+                  <button
+                    key={i.id}
+                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-muted/50"
+                    onClick={() => onOpenIssue(i)}
+                    title="Open issue"
+                  >
                     <span className="font-mono text-[10px] text-muted-foreground">{i.key}</span>
                     <span className="max-w-40 truncate">{i.title}</span>
-                  </span>
+                  </button>
                 ))}
               </CardContent>
             )}

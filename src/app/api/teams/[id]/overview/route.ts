@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }),
       prisma.task.findMany({
         where: { assigneeId: { in: memberIds }, status: { not: "COMPLETED" } },
-        select: { id: true, assigneeId: true, key: true, title: true, status: true, progress: true, dueDate: true },
+        select: { id: true, assigneeId: true, key: true, title: true, status: true, progress: true, dueDate: true, projectId: true },
       }),
       prisma.milestoneProgress.findMany({
         where: { userId: { in: memberIds }, milestone: { course: { enrollments: { some: { userId: { in: memberIds } } } } } },
@@ -56,18 +56,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .map((r) => ({ type: r.type, startDate: toKey(r.startDate), endDate: toKey(r.endDate) }));
       const tasks = openTasks
         .filter((t) => t.assigneeId === user.id)
-        .map((t) => ({ id: t.id, key: t.key, title: t.title, status: t.status, progress: t.progress, dueDate: t.dueDate ? toKey(t.dueDate) : null }));
+        .map((t) => ({ id: t.id, key: t.key, title: t.title, status: t.status, progress: t.progress, dueDate: t.dueDate ? toKey(t.dueDate) : null, projectId: t.projectId }));
 
       // Aggregate the member's courses: total milestone percent / milestone count.
-      const courseMap = new Map<string, { name: string; sum: number; count: number }>();
+      const courseMap = new Map<string, { id: string; name: string; sum: number; count: number }>();
       for (const row of progressRows) {
         if (row.userId !== user.id) continue;
-        const c = courseMap.get(row.milestone.courseId) ?? { name: row.milestone.course.name, sum: 0, count: 0 };
+        const c = courseMap.get(row.milestone.courseId) ?? { id: row.milestone.course.id, name: row.milestone.course.name, sum: 0, count: 0 };
         c.sum += row.percent;
         c.count += 1;
         courseMap.set(row.milestone.courseId, c);
       }
       const courses = [...courseMap.values()].map((c) => ({
+        id: c.id,
         name: c.name,
         percent: c.count ? Math.round(c.sum / c.count) : 0,
       }));
