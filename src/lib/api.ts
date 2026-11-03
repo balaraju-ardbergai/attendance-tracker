@@ -52,8 +52,20 @@ export async function requireUser(roles?: AppRole[]) {
 }
 
 export async function requireActiveUser(roles?: AppRole[]) {
-  const session = await requireUser(roles);
+  const session = await requireUser();
   const user = await prisma.user.findUnique({ where: { id: session.userId } });
   if (!user || !user.isActive) throw new ApiError(401, "Your account is no longer active.");
-  return { session, user };
+  if (roles && !roles.includes(user.role)) {
+    throw new ApiError(403, "You do not have permission to perform this action.");
+  }
+  return {
+    session: {
+      ...session,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      mustResetPassword: user.mustResetPassword,
+    },
+    user,
+  };
 }

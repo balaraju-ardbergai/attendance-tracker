@@ -11,7 +11,6 @@ import {
   History,
   LayoutDashboard,
   LogOut,
-  Plug,
   Users,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,7 +36,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/users", label: "Users", icon: Users, roles: ["ADMIN", "DIRECTOR"] },
   { href: "/approvals", label: "Approvals", icon: BadgeCheck, roles: ["DIRECTOR"] },
   { href: "/audit", label: "HR Activity", icon: History, roles: ["DIRECTOR"] },
-  { href: "/connectors", label: "Connectors", icon: Plug },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

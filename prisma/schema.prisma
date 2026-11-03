@@ -15,7 +15,6 @@ enum Role {
 
 enum AttendanceStatus {
   PRESENT
-  LATE
   LEAVE
   WFH
   ABSENT
@@ -70,7 +69,6 @@ model User {
   approvalsRequested Approval[]   @relation("ApprovalRequester")
   approvalsReviewed  Approval[]   @relation("ApprovalReviewer")
   otps               Otp[]
-  connections        Connection[]
   auditActions       AuditLog[]   @relation("AuditActor")
   auditTargets       AuditLog[]   @relation("AuditTarget")
 }
@@ -144,18 +142,6 @@ model Otp {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-}
-
-model Connection {
-  id           String   @id @default(cuid())
-  userId       String
-  provider     String
-  accountEmail String?
-  connectedAt  DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, provider])
 }
 
 model AuditLog {

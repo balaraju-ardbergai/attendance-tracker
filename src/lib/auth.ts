@@ -1,13 +1,10 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
+import { getAuthSecret } from "./auth-secret";
 
 export const SESSION_COOKIE = "ap_session";
 const SESSION_DAYS = 7;
-
-const secret = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? "dev-only-secret-do-not-use-in-production",
-);
 
 export type AppRole = "DIRECTOR" | "ADMIN" | "EMPLOYEE";
 
@@ -54,12 +51,12 @@ export async function signSession(payload: SessionPayload) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DAYS}d`)
-    .sign(secret);
+    .sign(getAuthSecret());
 }
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secret);
+    const { payload } = await jwtVerify(token, getAuthSecret());
     if (typeof payload.userId !== "string") return null;
     return {
       userId: payload.userId,
