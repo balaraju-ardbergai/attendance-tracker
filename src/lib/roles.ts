@@ -22,7 +22,6 @@ export const REQUEST_STATUS_LABEL: Record<string, string> = {
 
 export const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
   PRESENT: "Present",
-  LATE: "Late",
   LEAVE: "On Leave",
   WFH: "Work From Home",
   ABSENT: "Absent",
@@ -52,14 +51,11 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   APPROVAL_REJECTED: "Rejected an approval request",
   PASSWORD_CHANGED: "Changed their password",
   PASSWORD_RESET: "Reset their password",
-  CONNECTOR_LINKED: "Connected an external service",
-  CONNECTOR_UNLINKED: "Disconnected an external service",
 };
 
 // Status colors used by badges, the month grid and the combined stat bar.
 export const STATUS_TONE: Record<string, string> = {
   PRESENT: "bg-emerald-500",
-  LATE: "bg-amber-500",
   LEAVE: "bg-violet-500",
   WFH: "bg-sky-500",
   ABSENT: "bg-rose-500",

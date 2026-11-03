@@ -43,7 +43,7 @@ export async function GET() {
       month: { year, month, label: monthLabel(year, month) },
       summary: {
         employees: users.length,
-        presentToday: todayRecords.filter((r) => r.status === "PRESENT" || r.status === "LATE").length,
+        presentToday: todayRecords.filter((r) => r.status === "PRESENT").length,
         onLeaveToday: todayRecords.filter((r) => r.status === "LEAVE").length,
         wfhToday: todayRecords.filter((r) => r.status === "WFH").length,
         notMarkedToday: users.length - todayRecords.length,

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { getAuthSecret } from "@/lib/auth-secret";
 
 const SESSION_COOKIE = "ap_session";
-const secret = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? "dev-only-secret-do-not-use-in-production",
-);
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/forgot-password", "/reset-password"]);
 const AUTH_PAGES = new Set(["/login", "/forgot-password", "/reset-password"]);
@@ -16,7 +14,7 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (token) {
     try {
-      const { payload } = await jwtVerify(token, secret);
+      const { payload } = await jwtVerify(token, getAuthSecret());
       session = payload as { userId?: string; mustResetPassword?: boolean };
     } catch {
       session = null;

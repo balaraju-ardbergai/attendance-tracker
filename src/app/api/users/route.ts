@@ -27,7 +27,9 @@ export async function POST(req: Request) {
     const name = body.name?.trim();
     const email = body.email?.toLowerCase().trim();
     const department = body.department?.trim() || null;
-    const role = body.role === "ADMIN" && session.role === "DIRECTOR" ? "ADMIN" : "EMPLOYEE";
+    const role = session.role === "DIRECTOR" && (body.role === "DIRECTOR" || body.role === "ADMIN")
+      ? body.role
+      : "EMPLOYEE";
 
     if (!name || name.length < 2) throw new ApiError(400, "Please enter the person's full name.");
     if (!email || !EMAIL_RE.test(email)) throw new ApiError(400, "Please enter a valid email address.");

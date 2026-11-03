@@ -10,15 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatBar } from "@/components/stat-bar";
-import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
-import { monthLabel } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/roles";
 
 type Stats = {
   workingDays: number;
   present: number;
-  late: number;
   leave: number;
   wfh: number;
   absent: number;
@@ -69,7 +66,6 @@ function SummaryCard({
 }
 
 export default function DashboardPage() {
-  const user = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
   const [denied, setDenied] = useState(false);
 
@@ -125,7 +121,7 @@ export default function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {data.employees.map((employee) => {
               const s = employee.stats;
-              const pct = s.workingDays > 0 ? Math.round(((s.present + s.late) / s.workingDays) * 100) : 0;
+              const pct = s.workingDays > 0 ? Math.round((s.present / s.workingDays) * 100) : 0;
               return (
                 <Card key={employee.id}>
                   <CardContent className="p-5">
@@ -154,7 +150,7 @@ export default function DashboardPage() {
                     <div className="mt-4 space-y-2">
                       <StatBar stats={s} />
                       <p className="text-xs text-muted-foreground">
-                        {s.present} present · {s.late} late · {s.leave} leave · {s.wfh} WFH · {s.absent} absent
+                        {s.present} present · {s.leave} leave · {s.wfh} WFH · {s.absent} absent
                       </p>
                     </div>
                   </CardContent>

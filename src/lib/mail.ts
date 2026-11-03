@@ -2,15 +2,15 @@
 // App Password — see README) to send real email; otherwise emails are printed
 // to the server console so the app is fully testable without credentials.
 
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
 export function isMailConfigured(): boolean {
   return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
 }
 
-function getTransporter(): nodemailer.Transporter | null {
+function getTransporter(): Transporter | null {
   if (!isMailConfigured()) return null;
   if (!transporter) {
     transporter = nodemailer.createTransport({

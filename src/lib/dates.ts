@@ -68,7 +68,6 @@ export function workingDayKeysInRange(startKey: string, endKey: string, year: nu
 export type MonthStats = {
   workingDays: number;
   present: number;
-  late: number;
   leave: number;
   wfh: number;
   absent: number;
@@ -85,23 +84,20 @@ export function computeMonthStats(
   const byKey = new Map(records.map((r) => [toKey(r.date), r.status]));
 
   let present = 0;
-  let late = 0;
   let leave = 0;
   let wfh = 0;
   for (const key of elapsed) {
     const status = byKey.get(key);
     if (status === "PRESENT") present++;
-    else if (status === "LATE") late++;
     else if (status === "LEAVE") leave++;
     else if (status === "WFH") wfh++;
   }
 
   const effective = elapsed.filter((k) => !(k === todayKey && !byKey.has(k)));
-  const covered = present + late + leave + wfh;
+  const covered = present + leave + wfh;
   return {
     workingDays: effective.length,
     present,
-    late,
     leave,
     wfh,
     absent: Math.max(0, effective.length - covered),
