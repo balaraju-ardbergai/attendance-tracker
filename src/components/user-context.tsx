@@ -13,6 +13,7 @@ export type AppUser = {
   mustResetPassword: boolean;
   expenseAccess: boolean;
   isTeamLead: boolean;
+  theme: string;
 };
 
 export const UserContext = createContext<AppUser | null>(null);

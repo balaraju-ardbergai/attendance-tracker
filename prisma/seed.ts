@@ -5,6 +5,7 @@
 
 import { PrismaClient, AttendanceStatus, CourseAttendanceStatus, RequestStatus, RequestType, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { BUILT_IN_THEMES, MONOCHROME_THEME_SLUG } from "../src/lib/themes";
 
 const prisma = new PrismaClient();
 
@@ -79,13 +80,18 @@ async function main() {
   const todayKey = keyOf(now);
   const year = now.getFullYear();
   const month = now.getMonth();
+  const monochromeTheme = await prisma.portalTheme.upsert({
+    where: { slug: MONOCHROME_THEME_SLUG },
+    update: { ...BUILT_IN_THEMES[0], isBuiltIn: true, isActive: true },
+    create: { ...BUILT_IN_THEMES[0], isBuiltIn: true, isActive: true },
+  });
 
   const users: Record<string, string> = {};
   for (const person of PEOPLE) {
     const hash = await bcrypt.hash(person.password, 10);
     const user = await prisma.user.upsert({
       where: { email: person.email },
-      update: { name: person.name, role: person.role, department: person.department, isActive: true },
+      update: { name: person.name, role: person.role, department: person.department, isActive: true, themeId: monochromeTheme.id },
       create: {
         email: person.email,
         name: person.name,
@@ -93,6 +99,7 @@ async function main() {
         department: person.department,
         passwordHash: hash,
         mustResetPassword: false,
+        themeId: monochromeTheme.id,
       },
     });
     users[person.email] = user.id;
@@ -117,6 +124,7 @@ async function main() {
   });
   await prisma.expense.deleteMany({ where: { createdById: { in: ids } } });
   await prisma.task.deleteMany({ where: { createdById: { in: ids } } });
+  await prisma.project.deleteMany({ where: { key: { in: ["PRD", "OPS"] }, createdById: { in: ids } } });
   await prisma.team.deleteMany({ where: { createdById: { in: ids } } });
 
   // Per-user plan for believable month data.

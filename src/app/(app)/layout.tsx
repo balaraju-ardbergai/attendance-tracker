@@ -26,7 +26,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserContext, type AppUser } from "@/components/user-context";
 import { ChatWidget } from "@/components/chat-widget";
-import { api, initials } from "@/lib/client";
+import { usePortalTheme } from "@/components/theme-provider";
+import { api, clearApiCache, initials, prefetchApi } from "@/lib/client";
 import { ROLE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +90,7 @@ function visibleSections(user: AppUser) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { setTheme } = usePortalTheme();
   const [user, setUser] = useState<AppUser | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
@@ -100,6 +102,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         return;
       }
       setUser(data.user);
+      setTheme(data.user.theme);
+      prefetchApi("/api/directory");
+      prefetchApi("/api/theme");
       if (data.user.role === "DIRECTOR") {
         api<{ pendingCount: number }>("/api/approvals")
           .then((d) => setPendingApprovals(d.pendingCount))
@@ -108,7 +113,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } catch {
       router.replace("/login");
     }
-  }, [router]);
+  }, [router, setTheme]);
 
   useEffect(() => {
     void load();
@@ -118,6 +123,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       await api("/api/auth/logout", { method: "POST" });
     } finally {
+      clearApiCache();
       router.replace("/login");
     }
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -11,6 +11,7 @@ import {
   FolderKanban,
   KeyRound,
   Mail,
+  Palette,
   Pencil,
   Plug,
   Sparkles,
@@ -30,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
 import { StatBar } from "@/components/stat-bar";
 import { RequestDialog } from "@/components/request-dialog";
+import { usePortalTheme } from "@/components/theme-provider";
 import { api, initials, timeLabel } from "@/lib/client";
 import { formatKey } from "@/lib/dates";
 import { ATTENDANCE_STATUS_LABEL, REQUEST_STATUS_LABEL, REQUEST_TYPE_LABEL, ROLE_LABEL, TASK_PRIORITY_LABEL } from "@/lib/roles";
@@ -106,6 +108,10 @@ type ProfileData = {
   }[];
   skills: { id: string; skillId: string; name: string; proficiency: number; evidence: string | null }[];
   connections: { id: string; provider: string; accountEmail: string | null; connectedAt: string }[];
+  appearance: {
+    activeTheme: string;
+    themes: { id: string; slug: string; name: string; description: string | null }[];
+  };
   capabilities: { isTeamLead: boolean; expenseAccess: boolean; receivesExpenseReports: boolean };
   attention: { attendanceNotMarked: boolean; overdueIssues: number; pendingRequests: number; incompleteCourses: number };
 };
@@ -156,7 +162,7 @@ export default function ProfilePage() {
       <PageHeader title="My Profile" description="Your personal information, work, learning and account settings." />
 
       <Card className="overflow-hidden">
-        <div className="h-20 bg-gradient-to-r from-primary/90 via-primary to-violet-500" />
+        <div className="h-20 bg-primary" />
         <CardContent className="-mt-10 flex flex-wrap items-end gap-4 p-6 pt-0">
           <Avatar className="h-20 w-20 border-4 border-card shadow-sm">
             {data.identity.pictureUrl && <AvatarImage src={data.identity.pictureUrl} alt={data.identity.displayName} />}
@@ -451,16 +457,62 @@ function SkillDialog({ open, onOpenChange, editing, onSaved, onRemove }: { open:
 }
 
 function AccountCard({ data }: { data: ProfileData }) {
+  const { setTheme } = usePortalTheme();
+  const [savingTheme, setSavingTheme] = useState(false);
+
+  async function saveTheme(theme: string) {
+    setSavingTheme(true);
+    try {
+      const res = await api<{ theme: string; message: string }>("/api/theme", {
+        method: "PATCH",
+        body: JSON.stringify({ theme }),
+      });
+      setTheme(res.theme);
+      toast.success(res.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save your theme.");
+    } finally {
+      setSavingTheme(false);
+    }
+  }
+
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">Account & access</CardTitle><CardDescription>Access is managed by HR and Directors.</CardDescription></CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ReadOnly label="Role" value={ROLE_LABEL[data.identity.role as keyof typeof ROLE_LABEL] ?? data.identity.role} />
-        <ReadOnly label="Expense access" value={data.capabilities.expenseAccess ? "Enabled" : "Not enabled"} />
-        <ReadOnly label="Expense reports" value={data.capabilities.receivesExpenseReports ? "Subscribed" : "Not subscribed"} />
-        <ReadOnly label="Team lead" value={data.capabilities.isTeamLead ? "Yes" : "No"} />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader><CardTitle className="text-base">Appearance</CardTitle><CardDescription>Your portal theme is saved across sessions.</CardDescription></CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="space-y-2">
+            <Label>Theme</Label>
+            <Select value={data.appearance.activeTheme} onValueChange={saveTheme} disabled={savingTheme || data.appearance.themes.length <= 1}>
+              <SelectTrigger className="w-full sm:max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {data.appearance.themes.map((theme) => (
+                  <SelectItem key={theme.id} value={theme.slug}>{theme.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3 text-sm">
+            <Palette className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <p className="font-medium">Monochrome</p>
+              <p className="text-xs text-muted-foreground">Neutral UI with functional status colors.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle className="text-base">Account & access</CardTitle><CardDescription>Access is managed by HR and Directors.</CardDescription></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ReadOnly label="Role" value={ROLE_LABEL[data.identity.role as keyof typeof ROLE_LABEL] ?? data.identity.role} />
+          <ReadOnly label="Expense access" value={data.capabilities.expenseAccess ? "Enabled" : "Not enabled"} />
+          <ReadOnly label="Expense reports" value={data.capabilities.receivesExpenseReports ? "Subscribed" : "Not subscribed"} />
+          <ReadOnly label="Team lead" value={data.capabilities.isTeamLead ? "Yes" : "No"} />
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

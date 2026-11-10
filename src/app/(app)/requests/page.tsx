@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { RequestDialog } from "@/components/request-dialog";
 import { useUser } from "@/components/user-context";
@@ -84,12 +85,14 @@ export default function RequestsPage() {
 
   const [mine, setMine] = useState<RequestDto[]>([]);
   const [team, setTeam] = useState<RequestDto[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("ALL");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [review, setReview] = useState<{ request: RequestDto; action: "APPROVE" | "REJECT" } | null>(null);
   const [note, setNote] = useState("");
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const [mineRes, teamRes] = await Promise.all([
         api<{ requests: RequestDto[] }>("/api/requests"),
@@ -99,6 +102,8 @@ export default function RequestsPage() {
       setTeam(teamRes.requests);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load requests.");
+    } finally {
+      setLoading(false);
     }
   }, [isManager]);
 
@@ -183,7 +188,8 @@ export default function RequestsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTeam.length === 0 && (
+                    {loading && team.length === 0 && <RequestTableSkeleton columns={6} withAvatar />}
+                    {!loading && filteredTeam.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground">
                           Nothing here.
@@ -270,7 +276,8 @@ export default function RequestsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mine.length === 0 && (
+                  {loading && mine.length === 0 && <RequestTableSkeleton columns={6} />}
+                  {!loading && mine.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground">
                         You haven&apos;t submitted any requests yet.
@@ -344,5 +351,34 @@ export default function RequestsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function RequestTableSkeleton({ columns, withAvatar = false }: { columns: number; withAvatar?: boolean }) {
+  return (
+    <>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            {withAvatar ? (
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-7 w-7 rounded-full" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+              </div>
+            ) : (
+              <Skeleton className="h-4 w-16" />
+            )}
+          </TableCell>
+          {Array.from({ length: columns - 1 }).map((__, j) => (
+            <TableCell key={j} className={j === columns - 2 ? "text-right" : undefined}>
+              <Skeleton className={cn("h-4", j === columns - 2 ? "ml-auto w-20" : "w-24")} />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
   );
 }

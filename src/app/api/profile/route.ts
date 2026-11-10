@@ -2,6 +2,9 @@ import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
 import { computeMonthStats, fromKey, serverTodayKey, toKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
+import { BUILT_IN_THEMES, MONOCHROME_THEME_SLUG } from "@/lib/themes";
+
+const builtInThemeList = () => BUILT_IN_THEMES.map((theme) => ({ id: theme.slug, ...theme }));
 
 const PHONE_RE = /^[+()\-\s\d]{7,24}$/;
 const TIMEZONE_RE = /^[A-Za-z_]+(?:\/[A-Za-z0-9_+\-]+)+$/;
@@ -58,6 +61,7 @@ export async function GET() {
       enrollments,
       skills,
       connections,
+      themes,
     ] = await Promise.all([
       prisma.userProfile.findUnique({ where: { userId: user.id } }),
       user.managerId
@@ -124,6 +128,11 @@ export async function GET() {
         orderBy: { skill: { name: "asc" } },
       }),
       prisma.connection.findMany({ where: { userId: user.id }, orderBy: { provider: "asc" } }),
+      prisma.portalTheme.findMany({
+        where: { isActive: true, slug: { in: BUILT_IN_THEMES.map((theme) => theme.slug) } },
+        select: { id: true, slug: true, name: true, description: true },
+        orderBy: { name: "asc" },
+      }),
     ]);
 
     const milestoneIds = enrollments.flatMap((e) => e.course.milestones.map((m) => m.id));
@@ -134,6 +143,7 @@ export async function GET() {
         })
       : [];
     const progressByMilestone = new Map(progressRows.map((p) => [p.milestoneId, p.percent]));
+    const availableThemes = themes.length ? themes : builtInThemeList();
 
     const courses = enrollments.map((enrollment) => {
       const milestones = enrollment.course.milestones;
@@ -231,6 +241,12 @@ export async function GET() {
         accountEmail: connection.accountEmail,
         connectedAt: connection.connectedAt,
       })),
+      appearance: {
+        activeTheme: user.themeId && availableThemes.some((theme) => theme.id === user.themeId)
+          ? availableThemes.find((theme) => theme.id === user.themeId)?.slug
+          : MONOCHROME_THEME_SLUG,
+        themes: availableThemes,
+      },
       capabilities: {
         isTeamLead: ledTeams.length > 0,
         expenseAccess: session.role === "DIRECTOR" || session.role === "ADMIN" || user.expenseAccess,

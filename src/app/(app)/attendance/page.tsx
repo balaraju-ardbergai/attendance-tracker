@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MonthGrid } from "@/components/month-grid";
 import { PageHeader } from "@/components/page-header";
 import { RequestDialog } from "@/components/request-dialog";
@@ -60,10 +61,12 @@ export default function AttendancePage() {
   const [month, setMonth] = useState(now.getMonth());
   const [data, setData] = useState<AttendanceData | null>(null);
   const [pending, setPending] = useState<PendingRequest[]>([]);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const load = useCallback(async (y: number, m: number) => {
+    setLoading(true);
     try {
       const [attendance, requests] = await Promise.all([
         api<AttendanceData>(`/api/attendance?year=${y}&month=${m}`),
@@ -73,6 +76,8 @@ export default function AttendancePage() {
       setPending(requests.requests.filter((r) => r.status === "PENDING").slice(0, 3));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load attendance.");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -112,6 +117,7 @@ export default function AttendancePage() {
 
   const stats = data?.stats;
   const recordMap = Object.fromEntries((data?.records ?? []).map((r) => [r.key, r.status]));
+  const initialLoading = loading && !data;
 
   return (
     <div className="space-y-6">
@@ -126,7 +132,9 @@ export default function AttendancePage() {
         <CardHeader>
           <CardTitle className="text-base">Today</CardTitle>
           <CardDescription>
-            {todayRecord
+            {initialLoading
+              ? "Loading your day..."
+              : todayRecord
               ? ATTENDANCE_STATUS_LABEL[todayRecord.status]
               : currentMonth
                 ? "You haven't marked attendance for today yet."
@@ -134,7 +142,13 @@ export default function AttendancePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-4">
-          {todayRecord ? (
+          {initialLoading ? (
+            <>
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-5 w-48" />
+              <Skeleton className="h-9 w-32" />
+            </>
+          ) : todayRecord ? (
             <>
               <Badge variant="default">
                 {ATTENDANCE_STATUS_LABEL[todayRecord.status]}
@@ -188,7 +202,7 @@ export default function AttendancePage() {
             </div>
           </CardHeader>
           <CardContent>
-            {data && <MonthGrid year={year} month={month} todayKey={data.today} records={recordMap} />}
+            {initialLoading ? <Skeleton className="h-[360px] w-full" /> : data && <MonthGrid year={year} month={month} todayKey={data.today} records={recordMap} />}
           </CardContent>
         </Card>
 
@@ -201,7 +215,14 @@ export default function AttendancePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {stats && (
+              {initialLoading ? (
+                <>
+                  <Skeleton className="h-2 w-full" />
+                  <div className="grid grid-cols-4 gap-2">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+                  </div>
+                </>
+              ) : stats && (
                 <>
                   <StatBar stats={stats} />
                   <StatLegend />
@@ -231,7 +252,9 @@ export default function AttendancePage() {
               </Link>
             </CardHeader>
             <CardContent>
-              {pending.length === 0 ? (
+              {initialLoading ? (
+                <div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-11 w-full" />)}</div>
+              ) : pending.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No pending requests.</p>
               ) : (
                 <ul className="space-y-2">

@@ -109,6 +109,7 @@ model User {
   managerId              String?
   expenseAccess          Boolean  @default(false)
   receivesExpenseReports Boolean  @default(false)
+  themeId                String?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -138,6 +139,27 @@ model User {
   projectsCreated    Project[]           @relation("ProjectCreator")
   profile            UserProfile?
   skills             UserSkill[]
+  theme              PortalTheme? @relation("UserThemePreference", fields: [themeId], references: [id], onDelete: SetNull)
+  themesCreated      PortalTheme[] @relation("ThemeCreator")
+}
+
+model PortalTheme {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  isBuiltIn   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  tokens      Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User?  @relation("ThemeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  users   User[] @relation("UserThemePreference")
+
+  @@index([isActive])
+  @@index([createdById])
 }
 
 model Attendance {

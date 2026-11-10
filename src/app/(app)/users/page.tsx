@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
@@ -65,6 +66,7 @@ export default function UsersPage() {
 
   const [users, setUsers] = useState<UserDto[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<UserDto | null>(null);
   const [managerTarget, setManagerTarget] = useState<UserDto | null>(null);
@@ -78,6 +80,7 @@ export default function UsersPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const [usersRes, approvalsRes] = await Promise.all([
         api<{ users: UserDto[] }>("/api/users"),
@@ -89,6 +92,8 @@ export default function UsersPage() {
       setPendingCount(approvalsRes.pendingCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load users.");
+    } finally {
+      setLoading(false);
     }
   }, [isDirector]);
 
@@ -223,6 +228,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {loading && users.length === 0 && <UserTableSkeleton />}
               {users.map((u) => (
                 <TableRow key={u.id} className={!u.isActive ? "opacity-60" : undefined}>
                   <TableCell>
@@ -325,6 +331,13 @@ export default function UsersPage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {!loading && users.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -492,5 +505,30 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function UserTableSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-44" />
+              </div>
+            </div>
+          </TableCell>
+          <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+          <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell className="text-right"><Skeleton className="ml-auto h-8 w-20" /></TableCell>
+        </TableRow>
+      ))}
+    </>
   );
 }

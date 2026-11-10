@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FolderKanban, Layers, Plus, Zap } from "lucide-react";
+import { FolderKanban, Layers, Plus, RefreshCw, Zap } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
-import { api, initials } from "@/lib/client";
+import { api, initials, refreshApi } from "@/lib/client";
 import { TASK_PRIORITY_LABEL, TASK_STATUS_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,8 @@ type IssueDto = {
   dueDate: string | null;
   project?: { id: string; name: string; key: string } | null;
 };
+
+type DirectoryUser = { id: string; name: string; email: string };
 
 export default function ProjectsPage() {
   const router = useRouter();
@@ -316,8 +318,24 @@ function CreateProjectDialog({
   const [teamId, setTeamId] = useState("NONE");
   const [leadId, setLeadId] = useState("NONE");
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
-  const [users, setUsers] = useState<{ id: string; name: string; isActive: boolean }[]>([]);
+  const [users, setUsers] = useState<DirectoryUser[]>([]);
+  const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const loadUsers = useCallback(async (force = false) => {
+    setRefreshingUsers(true);
+    try {
+      const data = force
+        ? await refreshApi<{ users: DirectoryUser[] }>("/api/directory")
+        : await api<{ users: DirectoryUser[] }>("/api/directory");
+      setUsers(data.users);
+      if (force) toast.success("People list refreshed.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not refresh people.");
+    } finally {
+      setRefreshingUsers(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -328,11 +346,9 @@ function CreateProjectDialog({
       setTeamId("NONE");
       setLeadId("NONE");
       api<{ teams: { id: string; name: string }[] }>("/api/teams").then((d) => setTeams(d.teams)).catch(() => {});
-      api<{ users: { id: string; name: string; isActive: boolean }[] }>("/api/directory")
-        .then((d) => setUsers(d.users.filter((u) => u.isActive)))
-        .catch(() => {});
+      void loadUsers();
     }
-  }, [open]);
+  }, [loadUsers, open]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -404,9 +420,14 @@ function CreateProjectDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Project lead / Scrum master (optional)</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label>Project lead / Scrum master (optional)</Label>
+              <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => loadUsers(true)} disabled={refreshingUsers}>
+                <RefreshCw className={cn("h-3.5 w-3.5", refreshingUsers && "animate-spin")} /> Refresh
+              </Button>
+            </div>
             <Select value={leadId} onValueChange={setLeadId}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue placeholder={refreshingUsers ? "Checking for updates..." : "No lead"} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="NONE">No lead</SelectItem>
                 {users.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
