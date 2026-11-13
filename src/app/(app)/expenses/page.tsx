@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
+  BellRing,
+  CheckCircle2,
+  FileText,
   IndianRupee,
   Pencil,
   Plus,
@@ -37,9 +40,11 @@ import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api } from "@/lib/client";
 import { formatKey, serverTodayKey } from "@/lib/dates";
-import { EXPENSE_CATEGORY_LABEL } from "@/lib/roles";
+import { EXPENSE_CATEGORY_LABEL, INVOICE_STATUS_LABEL, INVOICE_TYPE_LABEL } from "@/lib/roles";
 
 const CATEGORIES = ["VENDOR_BILLING", "CLIENT_BILLING", "OFFICE_PURCHASE", "EVENT_PRIZE", "OTHER"];
+const INVOICE_TYPES = ["INCOMING", "OUTGOING"];
+const INVOICE_STATUSES = ["DRAFT", "SENT", "PENDING", "PAID", "CANCELLED"];
 const rupees = (n: number) =>
   `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
@@ -68,6 +73,32 @@ type Analytics = {
 };
 
 type TeamDto = { id: string; name: string };
+type InvoiceDto = {
+  id: string;
+  invoiceNumber: string | null;
+  title: string;
+  description: string | null;
+  type: string;
+  status: string;
+  source: string;
+  amount: number;
+  invoiceDate: string;
+  dueDate: string;
+  paidDate: string | null;
+  responsibleUserId: string;
+  responsibleUser: { id: string; name: string; email: string };
+  teamId: string | null;
+  team: { id: string; name: string } | null;
+  attachmentUrl: string | null;
+  creator: { id: string; name: string };
+};
+type InvoiceNotification = {
+  today: string;
+  dueThrough: string;
+  count: number;
+  overdueCount: number;
+  invoices: Pick<InvoiceDto, "id" | "title" | "source" | "amount" | "dueDate" | "status" | "type">[];
+};
 type UserDto = {
   id: string;
   name: string;
@@ -85,6 +116,8 @@ export default function ExpensesPage() {
 
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [expenses, setExpenses] = useState<ExpenseDto[] | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceDto[] | null>(null);
+  const [invoiceNotice, setInvoiceNotice] = useState<InvoiceNotification | null>(null);
   const [teams, setTeams] = useState<TeamDto[]>([]);
   const [denied, setDenied] = useState(false);
 
@@ -92,9 +125,16 @@ export default function ExpensesPage() {
   const [fTeam, setFTeam] = useState("ALL");
   const [fFrom, setFFrom] = useState("");
   const [fTo, setFTo] = useState("");
+  const [iStatus, setIStatus] = useState("ALL");
+  const [iType, setIType] = useState("ALL");
+  const [iResponsible, setIResponsible] = useState("ALL");
+  const [iFrom, setIFrom] = useState("");
+  const [iTo, setITo] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseDto | null>(null);
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<InvoiceDto | null>(null);
   const [users, setUsers] = useState<UserDto[] | null>(null);
 
   const loadAnalytics = useCallback(async () => {
@@ -133,17 +173,45 @@ export default function ExpensesPage() {
     }
   }, [fCategory, fTeam, fFrom, fTo]);
 
+  const loadInvoices = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (iStatus !== "ALL") params.set("status", iStatus);
+    if (iType !== "ALL") params.set("type", iType);
+    if (iResponsible !== "ALL") params.set("responsibleUserId", iResponsible);
+    if (iFrom) params.set("from", iFrom);
+    if (iTo) params.set("to", iTo);
+    try {
+      const data = await api<{ invoices: InvoiceDto[] }>(`/api/invoices?${params.toString()}`);
+      setInvoices(data.invoices);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load invoices.");
+    }
+  }, [iStatus, iType, iResponsible, iFrom, iTo]);
+
+  const loadInvoiceNotice = useCallback(async () => {
+    try {
+      setInvoiceNotice(await api<InvoiceNotification>("/api/invoices/notifications"));
+    } catch {
+      setInvoiceNotice(null);
+    }
+  }, []);
+
   useEffect(() => {
     void loadAnalytics();
+    void loadInvoiceNotice();
     api<{ teams: TeamDto[] }>("/api/teams").then((d) => setTeams(d.teams)).catch(() => {});
     if (isManager) {
       api<{ users: UserDto[] }>("/api/users").then((d) => setUsers(d.users)).catch(() => setUsers([]));
     }
-  }, [loadAnalytics, isManager]);
+  }, [loadAnalytics, loadInvoiceNotice, isManager]);
 
   useEffect(() => {
     if (!denied) void loadExpenses();
   }, [denied, loadExpenses]);
+
+  useEffect(() => {
+    if (!denied) void loadInvoices();
+  }, [denied, loadInvoices]);
 
   async function removeExpense(id: string, title: string) {
     if (!window.confirm(`Delete expense “${title}”?`)) return;
@@ -153,6 +221,30 @@ export default function ExpensesPage() {
       await Promise.all([loadExpenses(), loadAnalytics()]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not delete.");
+    }
+  }
+
+  async function removeInvoice(id: string, title: string) {
+    if (!window.confirm(`Delete invoice "${title}"?`)) return;
+    try {
+      await api(`/api/invoices/${id}`, { method: "DELETE" });
+      toast.success("Invoice deleted.");
+      await Promise.all([loadInvoices(), loadInvoiceNotice()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete invoice.");
+    }
+  }
+
+  async function markInvoicePaid(invoice: InvoiceDto) {
+    try {
+      await api(`/api/invoices/${invoice.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "PAID", paidDate: serverTodayKey() }),
+      });
+      toast.success("Invoice marked paid.");
+      await Promise.all([loadInvoices(), loadInvoiceNotice()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update invoice.");
     }
   }
 
@@ -216,6 +308,15 @@ export default function ExpensesPage() {
           }}
         >
           <Plus className="h-4 w-4" /> Record expense
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setEditingInvoice(null);
+            setInvoiceFormOpen(true);
+          }}
+        >
+          <FileText className="h-4 w-4" /> Record invoice
         </Button>
       </PageHeader>
 
@@ -281,6 +382,14 @@ export default function ExpensesPage() {
       <Tabs defaultValue="expenses">
         <TabsList>
           <TabsTrigger value="expenses">All expenses</TabsTrigger>
+          <TabsTrigger value="invoices">
+            Invoices
+            {invoiceNotice && invoiceNotice.count > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                {invoiceNotice.count}
+              </Badge>
+            )}
+          </TabsTrigger>
           {isManager && <TabsTrigger value="reports">Reports & recipients</TabsTrigger>}
         </TabsList>
 
@@ -382,6 +491,150 @@ export default function ExpensesPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="invoices" className="mt-4 space-y-4">
+          {invoiceNotice && invoiceNotice.count > 0 && (
+            <Card className="border-amber-300 bg-amber-50 text-amber-950">
+              <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <BellRing className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-medium">
+                      {invoiceNotice.overdueCount > 0
+                        ? `${invoiceNotice.overdueCount} overdue invoice${invoiceNotice.overdueCount === 1 ? "" : "s"} need attention.`
+                        : `${invoiceNotice.count} invoice${invoiceNotice.count === 1 ? "" : "s"} due by ${formatKey(invoiceNotice.dueThrough)}.`}
+                    </p>
+                    <p className="text-sm opacity-80">These are assigned to you and not yet paid or cancelled.</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="w-fit border-amber-700/40 text-amber-950">Due soon</Badge>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="flex-row flex-wrap items-center gap-3 space-y-0">
+              <Select value={iStatus} onValueChange={setIStatus}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All statuses</SelectItem>
+                  {INVOICE_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>{INVOICE_STATUS_LABEL[status]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={iType} onValueChange={setIType}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All types</SelectItem>
+                  {INVOICE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{INVOICE_TYPE_LABEL[type]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isManager && users && (
+                <Select value={iResponsible} onValueChange={setIResponsible}>
+                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All owners</SelectItem>
+                    {users.filter((u) => u.isActive).map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Input type="date" className="w-36" value={iFrom} onChange={(e) => setIFrom(e.target.value)} aria-label="Invoice due from" />
+              <Input type="date" className="w-36" value={iTo} onChange={(e) => setITo(e.target.value)} aria-label="Invoice due to" />
+              {(iStatus !== "ALL" || iType !== "ALL" || iResponsible !== "ALL" || iFrom || iTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIStatus("ALL");
+                    setIType("ALL");
+                    setIResponsible("ALL");
+                    setIFrom("");
+                    setITo("");
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {!invoices ? (
+                <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : invoices.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No invoices match the filters.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Due</TableHead>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden md:table-cell">Responsible</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((invoice) => {
+                      const dueKey = invoice.dueDate.slice(0, 10);
+                      const overdue = invoice.status !== "PAID" && invoice.status !== "CANCELLED" && dueKey < serverTodayKey();
+                      return (
+                        <TableRow key={invoice.id}>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            <span className={overdue ? "font-medium text-rose-600" : undefined}>{formatKey(dueKey)}</span>
+                          </TableCell>
+                          <TableCell className="max-w-64">
+                            <p className="truncate text-sm font-medium">{invoice.title}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {invoice.invoiceNumber ? `${invoice.invoiceNumber} - ` : ""}{invoice.source}
+                            </p>
+                          </TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px]">{INVOICE_TYPE_LABEL[invoice.type]}</Badge></TableCell>
+                          <TableCell>
+                            <Badge variant={overdue ? "destructive" : invoice.status === "PAID" ? "secondary" : "outline"} className="text-[10px]">
+                              {overdue ? "Overdue" : INVOICE_STATUS_LABEL[invoice.status]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{invoice.responsibleUser.name}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right text-sm font-semibold">{rupees(invoice.amount)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:text-emerald-600" aria-label="Mark paid" onClick={() => markInvoicePaid(invoice)}>
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label="Edit invoice"
+                                onClick={() => {
+                                  setEditingInvoice(invoice);
+                                  setInvoiceFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-600" aria-label="Delete invoice" onClick={() => removeInvoice(invoice.id, invoice.title)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {isManager && (
           <TabsContent value="reports" className="mt-4 space-y-4">
             <Card>
@@ -451,6 +704,19 @@ export default function ExpensesPage() {
         onSaved={async () => {
           setFormOpen(false);
           await Promise.all([loadExpenses(), loadAnalytics()]);
+        }}
+      />
+      <InvoiceFormDialog
+        open={invoiceFormOpen}
+        onOpenChange={setInvoiceFormOpen}
+        editing={editingInvoice}
+        teams={teams}
+        users={users}
+        me={me}
+        isManager={isManager}
+        onSaved={async () => {
+          setInvoiceFormOpen(false);
+          await Promise.all([loadInvoices(), loadInvoiceNotice()]);
         }}
       />
     </div>
@@ -613,6 +879,202 @@ function ExpenseFormDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting}>
               {submitting ? "Saving…" : editing ? "Save changes" : "Record expense"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InvoiceFormDialog({
+  open,
+  onOpenChange,
+  editing,
+  teams,
+  users,
+  me,
+  isManager,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editing: InvoiceDto | null;
+  teams: TeamDto[];
+  users: UserDto[] | null;
+  me: ReturnType<typeof useUser>;
+  isManager: boolean;
+  onSaved: () => void;
+}) {
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("INCOMING");
+  const [status, setStatus] = useState("PENDING");
+  const [source, setSource] = useState("");
+  const [amount, setAmount] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(serverTodayKey());
+  const [dueDate, setDueDate] = useState(serverTodayKey());
+  const [paidDate, setPaidDate] = useState("");
+  const [responsibleUserId, setResponsibleUserId] = useState("");
+  const [teamId, setTeamId] = useState("NONE");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setInvoiceNumber(editing?.invoiceNumber ?? "");
+      setTitle(editing?.title ?? "");
+      setType(editing?.type ?? "INCOMING");
+      setStatus(editing?.status ?? "PENDING");
+      setSource(editing?.source ?? "");
+      setAmount(editing ? String(editing.amount) : "");
+      setInvoiceDate(editing ? editing.invoiceDate.slice(0, 10) : serverTodayKey());
+      setDueDate(editing ? editing.dueDate.slice(0, 10) : serverTodayKey());
+      setPaidDate(editing?.paidDate?.slice(0, 10) ?? "");
+      setResponsibleUserId(editing?.responsibleUserId ?? me?.id ?? "");
+      setTeamId(editing?.teamId ?? "NONE");
+      setAttachmentUrl(editing?.attachmentUrl ?? "");
+      setDescription(editing?.description ?? "");
+    }
+  }, [open, editing, me?.id]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const payload = {
+        invoiceNumber: invoiceNumber || undefined,
+        title,
+        type,
+        status,
+        source,
+        amount: Number(amount),
+        invoiceDate,
+        dueDate,
+        paidDate: paidDate || null,
+        responsibleUserId: isManager ? responsibleUserId : me?.id,
+        teamId: teamId === "NONE" ? null : teamId,
+        attachmentUrl: attachmentUrl || undefined,
+        description: description || undefined,
+      };
+      if (!payload.responsibleUserId) throw new Error("Responsible user is required.");
+      if (editing) {
+        await api(`/api/invoices/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        toast.success("Invoice updated.");
+      } else {
+        await api("/api/invoices", { method: "POST", body: JSON.stringify(payload) });
+        toast.success("Invoice recorded.");
+      }
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save invoice.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const activeUsers = users?.filter((u) => u.isActive) ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit invoice" : "Record invoice"}</DialogTitle>
+          <DialogDescription>Track bills from companies, clients, vendors, and other sources.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
+            <div className="space-y-2">
+              <Label htmlFor="inv-title">Title</Label>
+              <Input id="inv-title" placeholder="e.g. November cloud services" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-number">Invoice no.</Label>
+              <Input id="inv-number" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INVOICE_TYPES.map((item) => <SelectItem key={item} value={item}>{INVOICE_TYPE_LABEL[item]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INVOICE_STATUSES.map((item) => <SelectItem key={item} value={item}>{INVOICE_STATUS_LABEL[item]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="inv-source">Company / source</Label>
+              <Input id="inv-source" placeholder="e.g. Acme Corp" value={source} onChange={(e) => setSource(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-amount">Amount (₹)</Label>
+              <Input id="inv-amount" type="number" min={0.01} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="inv-date">Invoice date</Label>
+              <Input id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-due">Due date</Label>
+              <Input id="inv-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-paid">Paid date</Label>
+              <Input id="inv-paid" type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Responsible user</Label>
+              {isManager ? (
+                <Select value={responsibleUserId} onValueChange={setResponsibleUserId}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select user" /></SelectTrigger>
+                  <SelectContent>
+                    {activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={me?.name ?? ""} disabled />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Team</Label>
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No team</SelectItem>
+                  {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inv-attachment">Attachment URL</Label>
+            <Input id="inv-attachment" value={attachmentUrl} onChange={(e) => setAttachmentUrl(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inv-desc">Notes</Label>
+            <Textarea id="inv-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Saving..." : editing ? "Save changes" : "Record invoice"}
             </Button>
           </DialogFooter>
         </form>

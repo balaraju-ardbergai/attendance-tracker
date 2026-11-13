@@ -47,6 +47,19 @@ export const EXPENSE_CATEGORY_LABEL: Record<string, string> = {
   OTHER: "Other",
 };
 
+export const INVOICE_TYPE_LABEL: Record<string, string> = {
+  INCOMING: "Incoming",
+  OUTGOING: "Outgoing",
+};
+
+export const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  PENDING: "Pending",
+  PAID: "Paid",
+  CANCELLED: "Cancelled",
+};
+
 export const TASK_STATUS_LABEL: Record<string, string> = {
   TODO: "To do",
   IN_PROGRESS: "In progress",
@@ -99,6 +112,9 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   EXPENSE_CREATED: "Recorded an expense",
   EXPENSE_UPDATED: "Updated an expense",
   EXPENSE_DELETED: "Deleted an expense",
+  INVOICE_CREATED: "Recorded an invoice",
+  INVOICE_UPDATED: "Updated an invoice",
+  INVOICE_DELETED: "Deleted an invoice",
   EXPENSE_ACCESS_GRANTED: "Granted expense access",
   EXPENSE_ACCESS_REVOKED: "Revoked expense access",
     

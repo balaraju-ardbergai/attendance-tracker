@@ -64,6 +64,19 @@ enum ExpenseCategory {
   OTHER
 }
 
+enum InvoiceType {
+  INCOMING
+  OUTGOING
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PENDING
+  PAID
+  CANCELLED
+}
+
 enum TaskStatus {
   TODO
   IN_PROGRESS
@@ -130,6 +143,8 @@ model User {
   milestoneProgress  MilestoneProgress[]
   courseAttendances  CourseAttendance[]
   expensesCreated    Expense[]           @relation("ExpenseCreator")
+  invoicesCreated    Invoice[]           @relation("InvoiceCreator")
+  invoicesResponsible Invoice[]          @relation("InvoiceResponsible")
   teamMemberships    TeamMember[]
   teamsLed           Team[]              @relation("TeamLead")
   teamsCreated       Team[]              @relation("TeamCreator")
@@ -356,6 +371,7 @@ model Team {
   creator  User         @relation("TeamCreator", fields: [createdById], references: [id])
   members  TeamMember[]
   expenses Expense[]
+  invoices Invoice[]
   tasks    Task[]
   projects Project[]
 }
@@ -392,6 +408,35 @@ model Expense {
 
   @@index([date])
   @@index([category])
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  invoiceNumber     String?
+  title             String
+  description       String?
+  type              InvoiceType
+  status            InvoiceStatus @default(PENDING)
+  source            String
+  amount            Float
+  invoiceDate       DateTime      @db.Date
+  dueDate           DateTime      @db.Date
+  paidDate          DateTime?     @db.Date
+  responsibleUserId String
+  teamId            String?
+  attachmentUrl     String?
+  createdById       String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  responsibleUser User  @relation("InvoiceResponsible", fields: [responsibleUserId], references: [id])
+  creator         User  @relation("InvoiceCreator", fields: [createdById], references: [id])
+  team            Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([responsibleUserId])
+  @@index([type])
 }
 
 model Task {
