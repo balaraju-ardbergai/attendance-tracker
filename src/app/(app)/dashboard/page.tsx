@@ -18,9 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatBar } from "@/components/stat-bar";
 import { PageHeader } from "@/components/page-header";
 import { EmployeeDetailDialog } from "@/components/employee-detail-dialog";
-import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
-import { ROLE_LABEL, TASK_STATUS_LABEL, ATTENDANCE_STATUS_LABEL } from "@/lib/roles";
+import { ROLE_LABEL, ATTENDANCE_STATUS_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 type Stats = {
@@ -65,7 +64,6 @@ const FILTER_LABEL: Record<Filter, string> = {
 };
 
 export default function DashboardPage() {
-  const me = useUser();
   const [data, setData] = useState<DashboardData | null>(null);
   const [denied, setDenied] = useState(false);
   const [filter, setFilter] = useState<Filter | null>(null);

@@ -67,8 +67,6 @@ type ProjectData = {
   canManage: boolean;
 };
 
-const priorityTone = (p: string) =>
-  p === "HIGH" ? "border-rose-500/50 text-rose-600" : p === "MEDIUM" ? "border-amber-500/50 text-amber-600" : "text-muted-foreground";
 const statusTone = (s: string) =>
   s === "COMPLETED" ? "border-emerald-500/50 text-emerald-600" : s === "IN_PROGRESS" || s === "IN_REVIEW" ? "border-amber-500/50 text-amber-600" : s === "BLOCKED" ? "border-rose-500/50 text-rose-600" : "text-muted-foreground";
 
@@ -451,7 +449,6 @@ export default function ProjectWorkspacePage() {
           phases={phases}
           epics={epics}
           members={members}
-          teamId={project.teamId}
           issue={null}
           onSaved={async () => {
             setCreateOpen(false);
@@ -471,7 +468,6 @@ export default function ProjectWorkspacePage() {
           phases={phases}
           epics={epics}
           members={members}
-          teamId={project.teamId}
           issue={detail}
           canManage={canManage}
           meId={me?.id ?? ""}
@@ -871,7 +867,7 @@ function PhaseDialog({
 /* --------------------------------- Issue dialog --------------------------------- */
 
 function IssueDialog({
-  open, onOpenChange, projectId, projectKey, methodology, sprints, phases, epics, members, teamId, issue, canManage, meId, onSaved, onChanged, onDelete,
+  open, onOpenChange, projectId, projectKey, methodology, sprints, phases, epics, members, issue, canManage, meId, onSaved, onChanged, onDelete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -882,7 +878,6 @@ function IssueDialog({
   phases: Phase[];
   epics: Issue[];
   members: { id: string; name: string; email: string; pictureUrl: string | null; isActive: boolean }[] | null;
-  teamId: string | null;
   issue: Issue | null;
   canManage?: boolean;
   meId?: string;
