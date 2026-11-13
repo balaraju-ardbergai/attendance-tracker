@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,25 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [microsoftHref, setMicrosoftHref] = useState("/api/auth/microsoft/start");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    const error = params.get("error");
+
+    if (next?.startsWith("/") && !next.startsWith("//")) {
+      setMicrosoftHref(`/api/auth/microsoft/start?next=${encodeURIComponent(next)}`);
+    }
+
+    const messages: Record<string, string> = {
+      microsoft: "Microsoft sign-in failed. Please try again.",
+      microsoft_config: "Microsoft sign-in is not configured yet.",
+      microsoft_email: "Microsoft did not return an email address for this account.",
+      microsoft_unknown: "Your Microsoft account is not active in this portal.",
+    };
+    if (error && messages[error]) toast.error(messages[error]);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -87,6 +106,16 @@ export default function LoginPage() {
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
+        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          <span>or</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <Button asChild variant="outline" className="w-full">
+          <a href={microsoftHref}>
+            <Mail className="h-4 w-4" /> Continue with Microsoft
+          </a>
+        </Button>
         <div className="mt-4 text-center text-sm">
           <Link href="/forgot-password" className="text-muted-foreground underline-offset-4 hover:underline">
             Forgot your password?
