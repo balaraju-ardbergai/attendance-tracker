@@ -20,6 +20,12 @@ enum AttendanceStatus {
   ABSENT
 }
 
+enum CourseAttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+}
+
 enum RequestType {
   LEAVE
   WFH
@@ -50,27 +56,125 @@ enum OtpPurpose {
   PASSWORD_RESET
 }
 
+enum ExpenseCategory {
+  VENDOR_BILLING
+  CLIENT_BILLING
+  OFFICE_PURCHASE
+  EVENT_PRIZE
+  OTHER
+}
+
+enum InvoiceType {
+  INCOMING
+  OUTGOING
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  BLOCKED
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskType {
+  EPIC
+  STORY
+  TASK
+  BUG
+}
+
+enum Methodology {
+  SCRUM
+  WATERFALL
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+}
+
 model User {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  name              String
-  role              Role     @default(EMPLOYEE)
-  department        String?
-  pictureUrl        String?
-  passwordHash      String?
-  mustResetPassword Boolean  @default(false)
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  email                  String   @unique
+  name                   String
+  role                   Role     @default(EMPLOYEE)
+  department             String?
+  pictureUrl             String?
+  passwordHash           String?
+  mustResetPassword      Boolean  @default(false)
+  isActive               Boolean  @default(true)
+  managerId              String?
+  expenseAccess          Boolean  @default(false)
+  receivesExpenseReports Boolean  @default(false)
+  themeId                String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  manager User?  @relation("OrgManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports User[] @relation("OrgManager")
 
   attendance         Attendance[]
-  requests           Request[]    @relation("Requester")
-  reviewedRequests   Request[]    @relation("Reviewer")
-  approvalsRequested Approval[]   @relation("ApprovalRequester")
-  approvalsReviewed  Approval[]   @relation("ApprovalReviewer")
+  requests           Request[]           @relation("Requester")
+  reviewedRequests   Request[]           @relation("Reviewer")
+  approvalsRequested Approval[]          @relation("ApprovalRequester")
+  approvalsReviewed  Approval[]          @relation("ApprovalReviewer")
   otps               Otp[]
-  auditActions       AuditLog[]   @relation("AuditActor")
-  auditTargets       AuditLog[]   @relation("AuditTarget")
+  connections        Connection[]
+  auditActions       AuditLog[]          @relation("AuditActor")
+  auditTargets       AuditLog[]          @relation("AuditTarget")
+  coursesCreated     Course[]            @relation("CourseCreator")
+  courseEnrollments  CourseEnrollment[]
+  milestoneProgress  MilestoneProgress[]
+  courseAttendances  CourseAttendance[]
+  expensesCreated    Expense[]           @relation("ExpenseCreator")
+  invoicesCreated    Invoice[]           @relation("InvoiceCreator")
+  invoicesResponsible Invoice[]          @relation("InvoiceResponsible")
+  teamMemberships    TeamMember[]
+  teamsLed           Team[]              @relation("TeamLead")
+  teamsCreated       Team[]              @relation("TeamCreator")
+  tasksAssigned      Task[]              @relation("TaskAssignee")
+  tasksCreated       Task[]              @relation("TaskCreator")
+  projectsLed        Project[]           @relation("ProjectLead")
+  projectsCreated    Project[]           @relation("ProjectCreator")
+  profile            UserProfile?
+  skills             UserSkill[]
+  theme              PortalTheme? @relation("UserThemePreference", fields: [themeId], references: [id], onDelete: SetNull)
+  themesCreated      PortalTheme[] @relation("ThemeCreator")
+}
+
+model PortalTheme {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  isBuiltIn   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  tokens      Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User?  @relation("ThemeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  users   User[] @relation("UserThemePreference")
+
+  @@index([isActive])
+  @@index([createdById])
 }
 
 model Attendance {
@@ -144,6 +248,18 @@ model Otp {
   @@index([userId])
 }
 
+model Connection {
+  id           String   @id @default(cuid())
+  userId       String
+  provider     String
+  accountEmail String?
+  connectedAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+}
+
 model AuditLog {
   id           String   @id @default(cuid())
   actorId      String
@@ -156,4 +272,300 @@ model AuditLog {
   targetUser User? @relation("AuditTarget", fields: [targetUserId], references: [id])
 
   @@index([createdAt])
+}
+
+model Course {
+  id                String    @id @default(cuid())
+  name              String
+  description       String?
+  startedOn         DateTime? @db.Date
+  attendanceEnabled Boolean   @default(false)
+  scheduleNote      String?
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  creator     User               @relation("CourseCreator", fields: [createdById], references: [id])
+  milestones  Milestone[]
+  enrollments CourseEnrollment[]
+  sessions    CourseSession[]
+}
+
+model Milestone {
+  id          String  @id @default(cuid())
+  courseId    String
+  order       Int
+  name        String
+  description String?
+  link        String?
+  durationMin Int?
+  phase       String?
+
+  course   Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress MilestoneProgress[]
+
+  @@index([courseId, order])
+}
+
+model MilestoneProgress {
+  id          String   @id @default(cuid())
+  milestoneId String
+  userId      String
+  percent     Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([milestoneId, userId])
+}
+
+model CourseEnrollment {
+  id         String   @id @default(cuid())
+  courseId   String
+  userId     String
+  enrolledAt DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, userId])
+}
+
+model CourseSession {
+  id       String   @id @default(cuid())
+  courseId String
+  date     DateTime @db.Date
+  topic    String?
+
+  course     Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  attendance CourseAttendance[]
+
+  @@unique([courseId, date])
+}
+
+model CourseAttendance {
+  id         String                 @id @default(cuid())
+  sessionId  String
+  userId     String
+  status     CourseAttendanceStatus @default(PRESENT)
+  markedById String?
+  markedAt   DateTime               @default(now())
+
+  session CourseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  leadId      String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead     User?        @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
+  creator  User         @relation("TeamCreator", fields: [createdById], references: [id])
+  members  TeamMember[]
+  expenses Expense[]
+  invoices Invoice[]
+  tasks    Task[]
+  projects Project[]
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+}
+
+model Expense {
+  id            String          @id @default(cuid())
+  title         String
+  description   String?
+  category      ExpenseCategory
+  party         String?
+  amount        Float
+  date          DateTime        @db.Date
+  teamId        String?
+  paymentMethod String?
+  receiptUrl    String?
+  createdById   String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  team    Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  creator User  @relation("ExpenseCreator", fields: [createdById], references: [id])
+
+  @@index([date])
+  @@index([category])
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  invoiceNumber     String?
+  title             String
+  description       String?
+  type              InvoiceType
+  status            InvoiceStatus @default(PENDING)
+  source            String
+  amount            Float
+  invoiceDate       DateTime      @db.Date
+  dueDate           DateTime      @db.Date
+  paidDate          DateTime?     @db.Date
+  responsibleUserId String
+  teamId            String?
+  attachmentUrl     String?
+  createdById       String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  responsibleUser User  @relation("InvoiceResponsible", fields: [responsibleUserId], references: [id])
+  creator         User  @relation("InvoiceCreator", fields: [createdById], references: [id])
+  team            Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([responsibleUserId])
+  @@index([type])
+}
+
+model Task {
+  id                 String       @id @default(cuid())
+  title              String
+  description        String?
+  status             TaskStatus   @default(TODO)
+  priority           TaskPriority @default(MEDIUM)
+  progress           Int          @default(0)
+  assigneeId         String?
+  teamId             String?
+  dueDate            DateTime?    @db.Date
+  createdById        String
+  // Jira-style work item fields (all optional so simple adhoc tasks still work)
+  projectId          String?
+  key                String?      @unique
+  seq                Int?
+  type               TaskType     @default(TASK)
+  epicId             String?
+  sprintId           String?
+  phaseId            String?
+  storyPoints        Int?
+  acceptanceCriteria String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  assignee  User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  creator   User     @relation("TaskCreator", fields: [createdById], references: [id])
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint    Sprint?  @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  phase     Phase?   @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  epic      Task?    @relation("TaskEpic", fields: [epicId], references: [id], onDelete: SetNull)
+  subIssues Task[]   @relation("TaskEpic")
+
+  @@index([assigneeId])
+  @@index([status])
+  @@index([projectId])
+  @@index([sprintId])
+  @@index([epicId])
+}
+
+model Project {
+  id          String      @id @default(cuid())
+  key         String      @unique
+  name        String
+  description String?
+  methodology Methodology @default(SCRUM)
+  teamId      String?
+  leadId      String?
+  createdById String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  lead    User?    @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  creator User     @relation("ProjectCreator", fields: [createdById], references: [id])
+  team    Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  sprints Sprint[]
+  phases  Phase[]
+  tasks   Task[]
+}
+
+model Sprint {
+  id        String       @id @default(cuid())
+  projectId String
+  name      String
+  goal      String?
+  startDate DateTime?    @db.Date
+  endDate   DateTime?    @db.Date
+  status    SprintStatus @default(PLANNED)
+  createdAt DateTime     @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId])
+}
+
+model Phase {
+  id        String    @id @default(cuid())
+  projectId String
+  name      String
+  order     Int
+  startDate DateTime? @db.Date
+  endDate   DateTime? @db.Date
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([projectId, order])
+}
+
+model UserProfile {
+  id                           String   @id @default(cuid())
+  userId                       String   @unique
+  preferredName                String?
+  phone                        String?
+  pronouns                     String?
+  location                     String?
+  timezone                     String?
+  bio                          String?
+  emergencyContactName         String?
+  emergencyContactRelationship String?
+  emergencyContactPhone        String?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Skill {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  createdAt DateTime    @default(now())
+  users     UserSkill[]
+}
+
+model UserSkill {
+  id          String   @id @default(cuid())
+  userId      String
+  skillId     String
+  proficiency Int      @default(1)
+  evidence    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillId])
+  @@index([userId])
 }

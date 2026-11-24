@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "./db";
-import { getSession, type AppRole } from "./auth";
+import { getSession, type AppRole, type SessionPayload } from "./auth";
 
 export class ApiError extends Error {
   constructor(
@@ -42,30 +42,49 @@ export async function readJson<T>(req: Request): Promise<T> {
   }
 }
 
-export async function requireUser(roles?: AppRole[]) {
+/**
+ * Authenticates the caller and re-checks the database so role changes,
+ * deactivations and forced password resets take effect immediately — the JWT
+ * alone (valid for 7 days) is never trusted for authorization.
+ * Throws 403 when the user still has a temporary password.
+ * Returns the session with a FRESH role plus the DB user.
+ */
+export async function requireUser(roles?: AppRole[]): Promise<{ session: SessionPayload; user: NonNullable<Awaited<ReturnType<typeof fetchUser>>> }> {
   const session = await getSession();
   if (!session) throw new ApiError(401, "You must sign in first.");
-  if (roles && !roles.includes(session.role)) {
-    throw new ApiError(403, "You do not have permission to perform this action.");
-  }
-  return session;
-}
 
-export async function requireActiveUser(roles?: AppRole[]) {
-  const session = await requireUser();
-  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  const user = await fetchUser(session.userId);
   if (!user || !user.isActive) throw new ApiError(401, "Your account is no longer active.");
+  if (user.mustResetPassword) {
+    throw new ApiError(403, "Set your new password before using the portal.");
+  }
   if (roles && !roles.includes(user.role)) {
     throw new ApiError(403, "You do not have permission to perform this action.");
   }
-  return {
-    session: {
-      ...session,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      mustResetPassword: user.mustResetPassword,
-    },
-    user,
+
+  // Refresh the session payload so callers always branch on live values.
+  const fresh: SessionPayload = {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    mustResetPassword: user.mustResetPassword,
   };
+  return { session: fresh, user };
+}
+
+export async function requireActiveUser(roles?: AppRole[]) {
+  return requireUser(roles);
+}
+
+export async function requireExpenseAccess() {
+  const { session, user } = await requireUser();
+  if (user.role !== "DIRECTOR" && user.role !== "ADMIN" && !user.expenseAccess) {
+    throw new ApiError(403, "You do not have access to Expenses.");
+  }
+  return { session, user };
+}
+
+async function fetchUser(id: string) {
+  return prisma.user.findUnique({ where: { id } });
 }

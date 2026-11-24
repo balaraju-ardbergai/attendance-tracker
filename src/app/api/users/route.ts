@@ -14,6 +14,7 @@ export async function GET() {
       select: {
         id: true, name: true, email: true, role: true, department: true,
         pictureUrl: true, isActive: true, createdAt: true,
+        managerId: true, expenseAccess: true, receivesExpenseReports: true,
       },
     });
     return ok({ users });
@@ -27,9 +28,7 @@ export async function POST(req: Request) {
     const name = body.name?.trim();
     const email = body.email?.toLowerCase().trim();
     const department = body.department?.trim() || null;
-    const role = session.role === "DIRECTOR" && (body.role === "DIRECTOR" || body.role === "ADMIN")
-      ? body.role
-      : "EMPLOYEE";
+    const role = body.role === "ADMIN" && session.role === "DIRECTOR" ? "ADMIN" : "EMPLOYEE";
 
     if (!name || name.length < 2) throw new ApiError(400, "Please enter the person's full name.");
     if (!email || !EMAIL_RE.test(email)) throw new ApiError(400, "Please enter a valid email address.");

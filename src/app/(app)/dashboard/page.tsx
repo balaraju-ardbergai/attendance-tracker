@@ -3,15 +3,24 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CalendarX, Home as HomeIcon, Palmtree, Users2 } from "lucide-react";
+import {
+  CalendarX,
+  Home as HomeIcon,
+  Palmtree,
+  Users2,
+} from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatBar } from "@/components/stat-bar";
+import { PageHeader } from "@/components/page-header";
+import { EmployeeDetailDialog } from "@/components/employee-detail-dialog";
 import { api, initials } from "@/lib/client";
-import { ROLE_LABEL } from "@/lib/roles";
+import { ROLE_LABEL, ATTENDANCE_STATUS_LABEL } from "@/lib/roles";
+import { cn } from "@/lib/utils";
 
 type Stats = {
   workingDays: number;
@@ -19,6 +28,17 @@ type Stats = {
   leave: number;
   wfh: number;
   absent: number;
+};
+
+type Employee = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string | null;
+  pictureUrl: string | null;
+  todayStatus: string | null;
+  stats: Stats;
 };
 
 type DashboardData = {
@@ -30,44 +50,24 @@ type DashboardData = {
     wfhToday: number;
     notMarkedToday: number;
   };
-  employees: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    department: string | null;
-    pictureUrl: string | null;
-    stats: Stats;
-  }[];
+  employees: Employee[];
 };
 
-function SummaryCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-          <Icon className="h-5 w-5 text-muted-foreground" />
-        </span>
-        <div>
-          <div className="text-2xl font-semibold leading-none">{value}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{label}</div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+type Filter = "ALL" | "PRESENT" | "LEAVE" | "WFH" | "NOT_MARKED";
+
+const FILTER_LABEL: Record<Filter, string> = {
+  ALL: "Everyone",
+  PRESENT: "Present today",
+  LEAVE: "On leave today",
+  WFH: "Working from home today",
+  NOT_MARKED: "Not marked today",
+};
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [denied, setDenied] = useState(false);
+  const [filter, setFilter] = useState<Filter | null>(null);
+  const [overviewId, setOverviewId] = useState<string | null>(null);
 
   useEffect(() => {
     api<DashboardData>("/api/dashboard")
@@ -77,6 +77,20 @@ export default function DashboardPage() {
         else toast.error(err instanceof Error ? err.message : "Could not load the dashboard.");
       });
   }, []);
+
+  function openOverview(id: string) {
+    setOverviewId(id);
+  }
+
+  function matchesFilter(employee: Employee, filter: Filter): boolean {
+    switch (filter) {
+      case "ALL": return true;
+      case "PRESENT": return employee.todayStatus === "PRESENT";
+      case "LEAVE": return employee.todayStatus === "LEAVE";
+      case "WFH": return employee.todayStatus === "WFH";
+      case "NOT_MARKED": return employee.todayStatus === null;
+    }
+  }
 
   if (denied) {
     return (
@@ -94,14 +108,20 @@ export default function DashboardPage() {
     );
   }
 
+  const todayBadgeTone = (status: string | null) =>
+    status === "PRESENT"
+      ? "border-emerald-500/50 text-emerald-600"
+      : status === "LEAVE"
+        ? "border-violet-500/50 text-violet-600"
+        : status === "WFH"
+          ? "border-sky-500/50 text-sky-600"
+          : "text-muted-foreground";
+
+  const filtered = data && filter ? data.employees.filter((e) => matchesFilter(e, filter)) : [];
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Organization</h1>
-        <p className="text-sm text-muted-foreground">
-          {data ? `${data.month.label} at a glance` : "Loading…"}
-        </p>
-      </div>
+      <PageHeader title="Organization" description={data ? `${data.month.label} at a glance` : "Loading…"} />
 
       {!data ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -111,62 +131,159 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryCard label="Employees" value={data.summary.employees} icon={Users2} />
-            <SummaryCard label="Present today" value={data.summary.presentToday} icon={Users2} />
-            <SummaryCard label="On leave today" value={data.summary.onLeaveToday} icon={Palmtree} />
-            <SummaryCard label="WFH today" value={data.summary.wfhToday} icon={HomeIcon} />
+          {/* Clickable summary cards — each opens the list of matching people */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <SummaryCard label="Employees" sub="everyone active" value={data.summary.employees} icon={Users2} onClick={() => setFilter("ALL")} />
+            <SummaryCard label="Present today" sub="click to see who" value={data.summary.presentToday} icon={Users2} onClick={() => setFilter("PRESENT")} />
+            <SummaryCard label="On leave today" sub="click to see who" value={data.summary.onLeaveToday} icon={Palmtree} onClick={() => setFilter("LEAVE")} />
+            <SummaryCard label="WFH today" sub="click to see who" value={data.summary.wfhToday} icon={HomeIcon} onClick={() => setFilter("WFH")} />
+            <SummaryCard label="Not marked today" sub="click to see who" value={data.summary.notMarkedToday} icon={CalendarX} onClick={() => setFilter("NOT_MARKED")} />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {data.employees.map((employee) => {
-              const s = employee.stats;
-              const pct = s.workingDays > 0 ? Math.round((s.present / s.workingDays) * 100) : 0;
-              return (
-                <Card key={employee.id}>
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-3">
-                      <Avatar className="h-11 w-11">
-                        {employee.pictureUrl && <AvatarImage src={employee.pictureUrl} alt={employee.name} />}
-                        <AvatarFallback>{initials(employee.name)}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate font-medium">{employee.name}</p>
-                          <Badge variant="secondary" className="shrink-0 text-[10px]">
-                            {ROLE_LABEL[employee.role as keyof typeof ROLE_LABEL] ?? employee.role}
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-muted-foreground">Employees</h2>
+              <p className="text-xs text-muted-foreground">Click a card for attendance, tasks and courses.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {data.employees.map((employee) => {
+                const s = employee.stats;
+                const pct = s.workingDays > 0 ? Math.round((s.present / s.workingDays) * 100) : 0;
+                return (
+                  <Card
+                    key={employee.id}
+                    className="cursor-pointer transition-shadow hover:shadow-md"
+                    onClick={() => openOverview(employee.id)}
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="h-11 w-11">
+                          {employee.pictureUrl && <AvatarImage src={employee.pictureUrl} alt={employee.name} />}
+                          <AvatarFallback>{initials(employee.name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-medium">{employee.name}</p>
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {ROLE_LABEL[employee.role as keyof typeof ROLE_LABEL] ?? employee.role}
+                            </Badge>
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">{employee.email}</p>
+                          {employee.department && (
+                            <p className="text-xs text-muted-foreground">{employee.department}</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1.5">
+                          <div className="text-lg font-semibold leading-none">{pct}%</div>
+                          <div className="text-[10px] text-muted-foreground">present</div>
+                          <Badge variant="outline" className={cn("text-[10px]", todayBadgeTone(employee.todayStatus))}>
+                            {employee.todayStatus ? ATTENDANCE_STATUS_LABEL[employee.todayStatus] : "Not marked"}
                           </Badge>
                         </div>
-                        <p className="truncate text-xs text-muted-foreground">{employee.email}</p>
-                        {employee.department && (
-                          <p className="text-xs text-muted-foreground">{employee.department}</p>
-                        )}
                       </div>
-                      <div className="text-right">
-                        <div className="text-lg font-semibold leading-none">{pct}%</div>
-                        <div className="text-[10px] text-muted-foreground">present</div>
+                      <div className="mt-4 space-y-2">
+                        <StatBar stats={s} />
+                        <p className="text-xs text-muted-foreground">
+                          {s.present} present · {s.leave} leave · {s.wfh} WFH · {s.absent} absent
+                        </p>
                       </div>
-                    </div>
-                    <div className="mt-4 space-y-2">
-                      <StatBar stats={s} />
-                      <p className="text-xs text-muted-foreground">
-                        {s.present} present · {s.leave} leave · {s.wfh} WFH · {s.absent} absent
-                      </p>
-                    </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+              {data.employees.length === 0 && (
+                <Card>
+                  <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+                    <CalendarX className="h-4 w-4" /> No employees found.
                   </CardContent>
                 </Card>
-              );
-            })}
-            {data.employees.length === 0 && (
-              <Card>
-                <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
-                  <CalendarX className="h-4 w-4" /> No employees found.
-                </CardContent>
-              </Card>
-            )}
+              )}
+            </div>
           </div>
         </>
       )}
+
+      {/* People list for a summary card */}
+      <Dialog open={filter !== null} onOpenChange={(open) => !open && setFilter(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{filter ? FILTER_LABEL[filter] : ""}</DialogTitle>
+            <DialogDescription>
+              {filtered.length} people{filter === "NOT_MARKED" ? " — nudge them to mark attendance." : "."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            {filtered.map((e) => (
+              <button
+                key={e.id}
+                className="flex w-full items-center gap-2.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/50"
+                onClick={() => {
+                  setFilter(null);
+                  openOverview(e.id);
+                }}
+              >
+                <Avatar className="h-8 w-8">
+                  {e.pictureUrl && <AvatarImage src={e.pictureUrl} alt={e.name} />}
+                  <AvatarFallback className="text-xs">{initials(e.name)}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{e.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{e.department ?? e.email}</p>
+                </div>
+                <Badge variant="outline" className={cn("text-[10px]", todayBadgeTone(e.todayStatus))}>
+                  {e.todayStatus ? ATTENDANCE_STATUS_LABEL[e.todayStatus] : "Not marked"}
+                </Badge>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">Nobody in this group right now.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <EmployeeDetailDialog employeeId={overviewId} onClose={() => setOverviewId(null)} />
     </div>
+  );
+}
+
+function SummaryCard({
+  label,
+  sub,
+  value,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  sub: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  onClick: () => void;
+}) {
+  return (
+    <Card
+      className="cursor-pointer transition-all hover:shadow-md hover:ring-1 hover:ring-primary/30"
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <CardContent className="flex items-center gap-3 p-4">
+        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+        </span>
+        <div className="min-w-0">
+          <div className="text-2xl font-semibold leading-none">{value}</div>
+          <div className="mt-1 truncate text-xs text-muted-foreground">
+            {label} · <span className="underline decoration-dotted underline-offset-2">{sub}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

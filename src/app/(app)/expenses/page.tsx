@@ -1,0 +1,1084 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import {
+  BellRing,
+  CheckCircle2,
+  FileText,
+  IndianRupee,
+  Pencil,
+  Plus,
+  ReceiptText,
+  Send,
+  Trash2,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { BarChartCard, ChartLegend, DonutChartCard } from "@/components/charts";
+import { PageHeader } from "@/components/page-header";
+import { useUser } from "@/components/user-context";
+import { api } from "@/lib/client";
+import { formatKey, serverTodayKey } from "@/lib/dates";
+import { EXPENSE_CATEGORY_LABEL, INVOICE_STATUS_LABEL, INVOICE_TYPE_LABEL } from "@/lib/roles";
+
+const CATEGORIES = ["VENDOR_BILLING", "CLIENT_BILLING", "OFFICE_PURCHASE", "EVENT_PRIZE", "OTHER"];
+const INVOICE_TYPES = ["INCOMING", "OUTGOING"];
+const INVOICE_STATUSES = ["DRAFT", "SENT", "PENDING", "PAID", "CANCELLED"];
+const rupees = (n: number) =>
+  `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
+type ExpenseDto = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string;
+  party: string | null;
+  amount: number;
+  date: string;
+  teamId: string | null;
+  team: { id: string; name: string } | null;
+  paymentMethod: string | null;
+  receiptUrl: string | null;
+  creator: { id: string; name: string };
+};
+
+type Analytics = {
+  week: { start: string; end: string; total: number; count: number };
+  month: { start: string; end: string; total: number; count: number };
+  trend: { key: string; label: string; total: number }[];
+  byCategory: { category: string; total: number }[];
+  byTeam: { teamId: string; name: string; total: number }[];
+  topExpenses: { id: string; title: string; category: string; amount: number; date: string }[];
+};
+
+type TeamDto = { id: string; name: string };
+type InvoiceDto = {
+  id: string;
+  invoiceNumber: string | null;
+  title: string;
+  description: string | null;
+  type: string;
+  status: string;
+  source: string;
+  amount: number;
+  invoiceDate: string;
+  dueDate: string;
+  paidDate: string | null;
+  responsibleUserId: string;
+  responsibleUser: { id: string; name: string; email: string };
+  teamId: string | null;
+  team: { id: string; name: string } | null;
+  attachmentUrl: string | null;
+  creator: { id: string; name: string };
+};
+type InvoiceNotification = {
+  today: string;
+  dueThrough: string;
+  count: number;
+  overdueCount: number;
+  invoices: Pick<InvoiceDto, "id" | "title" | "source" | "amount" | "dueDate" | "status" | "type">[];
+};
+type UserDto = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  expenseAccess: boolean;
+  receivesExpenseReports: boolean;
+};
+
+export default function ExpensesPage() {
+  const me = useUser();
+  const isManager = me?.role === "ADMIN" || me?.role === "DIRECTOR";
+  const isDirector = me?.role === "DIRECTOR";
+
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [expenses, setExpenses] = useState<ExpenseDto[] | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceDto[] | null>(null);
+  const [invoiceNotice, setInvoiceNotice] = useState<InvoiceNotification | null>(null);
+  const [teams, setTeams] = useState<TeamDto[]>([]);
+  const [denied, setDenied] = useState(false);
+
+  const [fCategory, setFCategory] = useState("ALL");
+  const [fTeam, setFTeam] = useState("ALL");
+  const [fFrom, setFFrom] = useState("");
+  const [fTo, setFTo] = useState("");
+  const [iStatus, setIStatus] = useState("ALL");
+  const [iType, setIType] = useState("ALL");
+  const [iResponsible, setIResponsible] = useState("ALL");
+  const [iFrom, setIFrom] = useState("");
+  const [iTo, setITo] = useState("");
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<ExpenseDto | null>(null);
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<InvoiceDto | null>(null);
+  const [users, setUsers] = useState<UserDto[] | null>(null);
+
+  const loadAnalytics = useCallback(async () => {
+    try {
+      setAnalytics(await api<Analytics>("/api/expenses/analytics"));
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("access")) setDenied(true);
+      else toast.error(err instanceof Error ? err.message : "Could not load analytics.");
+    }
+  }, []);
+
+  const [teamParam, setTeamParam] = useState<string | null>(null);
+  useEffect(() => {
+    // One-shot deep link (?teamId=) — read from the URL on mount.
+    setTeamParam(new URLSearchParams(window.location.search).get("teamId"));
+  }, []);
+
+  // Apply the ?teamId= deep link once teams have loaded.
+  useEffect(() => {
+    if (teamParam && teams.length > 0 && fTeam === "ALL") {
+      if (teams.some((t) => t.id === teamParam)) setFTeam(teamParam);
+    }
+  }, [teamParam, teams, fTeam]);
+
+  const loadExpenses = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (fCategory !== "ALL") params.set("category", fCategory);
+    if (fTeam !== "ALL") params.set("teamId", fTeam);
+    if (fFrom) params.set("from", fFrom);
+    if (fTo) params.set("to", fTo);
+    try {
+      const data = await api<{ expenses: ExpenseDto[] }>(`/api/expenses?${params.toString()}`);
+      setExpenses(data.expenses);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load expenses.");
+    }
+  }, [fCategory, fTeam, fFrom, fTo]);
+
+  const loadInvoices = useCallback(async () => {
+    const params = new URLSearchParams();
+    if (iStatus !== "ALL") params.set("status", iStatus);
+    if (iType !== "ALL") params.set("type", iType);
+    if (iResponsible !== "ALL") params.set("responsibleUserId", iResponsible);
+    if (iFrom) params.set("from", iFrom);
+    if (iTo) params.set("to", iTo);
+    try {
+      const data = await api<{ invoices: InvoiceDto[] }>(`/api/invoices?${params.toString()}`);
+      setInvoices(data.invoices);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load invoices.");
+    }
+  }, [iStatus, iType, iResponsible, iFrom, iTo]);
+
+  const loadInvoiceNotice = useCallback(async () => {
+    try {
+      setInvoiceNotice(await api<InvoiceNotification>("/api/invoices/notifications"));
+    } catch {
+      setInvoiceNotice(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAnalytics();
+    void loadInvoiceNotice();
+    api<{ teams: TeamDto[] }>("/api/teams").then((d) => setTeams(d.teams)).catch(() => {});
+    if (isManager) {
+      api<{ users: UserDto[] }>("/api/users").then((d) => setUsers(d.users)).catch(() => setUsers([]));
+    }
+  }, [loadAnalytics, loadInvoiceNotice, isManager]);
+
+  useEffect(() => {
+    if (!denied) void loadExpenses();
+  }, [denied, loadExpenses]);
+
+  useEffect(() => {
+    if (!denied) void loadInvoices();
+  }, [denied, loadInvoices]);
+
+  async function removeExpense(id: string, title: string) {
+    if (!window.confirm(`Delete expense “${title}”?`)) return;
+    try {
+      await api(`/api/expenses/${id}`, { method: "DELETE" });
+      toast.success("Expense deleted.");
+      await Promise.all([loadExpenses(), loadAnalytics()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete.");
+    }
+  }
+
+  async function removeInvoice(id: string, title: string) {
+    if (!window.confirm(`Delete invoice "${title}"?`)) return;
+    try {
+      await api(`/api/invoices/${id}`, { method: "DELETE" });
+      toast.success("Invoice deleted.");
+      await Promise.all([loadInvoices(), loadInvoiceNotice()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete invoice.");
+    }
+  }
+
+  async function markInvoicePaid(invoice: InvoiceDto) {
+    try {
+      await api(`/api/invoices/${invoice.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "PAID", paidDate: serverTodayKey() }),
+      });
+      toast.success("Invoice marked paid.");
+      await Promise.all([loadInvoices(), loadInvoiceNotice()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update invoice.");
+    }
+  }
+
+  async function sendReport(period: "weekly" | "monthly") {
+    try {
+      const data = await api<{ message: string }>(`/api/reports/expense/${period}`, { method: "POST" });
+      toast.success(data.message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the report.");
+    }
+  }
+
+  async function toggleReports(u: UserDto) {
+    const action = u.receivesExpenseReports ? "UNSUBSCRIBE_REPORTS" : "SUBSCRIBE_REPORTS";
+    try {
+      const data = await api<{ message: string }>(`/api/users/${u.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action }),
+      });
+      toast.success(data.message);
+      setUsers((prev) => prev?.map((x) => (x.id === u.id ? { ...x, receivesExpenseReports: !u.receivesExpenseReports, expenseAccess: action === "SUBSCRIBE_REPORTS" ? true : x.expenseAccess } : x)) ?? null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update the recipient.");
+    }
+  }
+
+  if (denied) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Expenses</CardTitle>
+          <CardDescription>You don&apos;t have access to Expenses. Directors and HR can grant access.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline">
+            <Link href="/attendance">Back to attendance</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const monthTopCategory = analytics?.byCategory.length
+    ? [...analytics.byCategory].sort((a, b) => b.total - a.total)[0]
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Expenses"
+        description={
+          fTeam !== "ALL" && teams.find((t) => t.id === fTeam)
+            ? `Team spend for ${teams.find((t) => t.id === fTeam)!.name} — vendor billings, office purchases and event spends.`
+            : "Vendor & client billings, office purchases and event spends — all in one place."
+        }
+      >
+        <Button
+          onClick={() => {
+            setEditing(null);
+            setFormOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4" /> Record expense
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setEditingInvoice(null);
+            setInvoiceFormOpen(true);
+          }}
+        >
+          <FileText className="h-4 w-4" /> Record invoice
+        </Button>
+      </PageHeader>
+
+      {!analytics ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryCard icon={Wallet} label="This week" sub={`${formatKey(analytics.week.start)} – ${formatKey(analytics.week.end)}`} value={rupees(analytics.week.total)} />
+            <SummaryCard icon={IndianRupee} label="This month" sub={`${analytics.month.count} expenses`} value={rupees(analytics.month.total)} />
+            <SummaryCard icon={TrendingUp} label="Top category (month)" sub={monthTopCategory ? EXPENSE_CATEGORY_LABEL[monthTopCategory.category] : "None yet"} value={monthTopCategory ? rupees(monthTopCategory.total) : "₹0"} />
+            <SummaryCard icon={ReceiptText} label="Recorded expenses" sub="current month" value={String(analytics.month.count)} />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Monthly trend</CardTitle>
+                <CardDescription>Total spend over the last 6 months</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BarChartCard data={analytics.trend.map((t) => ({ label: t.label, value: t.total }))} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">This month by category</CardTitle>
+                <CardDescription>Where the money went</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {analytics.byCategory.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No expenses this month yet.</p>
+                ) : (
+                  <>
+                    <DonutChartCard data={analytics.byCategory.map((c) => ({ label: EXPENSE_CATEGORY_LABEL[c.category], value: c.total }))} />
+                    <ChartLegend items={analytics.byCategory.map((c) => EXPENSE_CATEGORY_LABEL[c.category])} />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">This month by team</CardTitle>
+              <CardDescription>Team-attributed spend</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {analytics.byTeam.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">No team-attributed expenses this month.</p>
+              ) : (
+                <BarChartCard data={analytics.byTeam.map((t) => ({ label: t.name, value: t.total }))} color="#0ea5e9" height={200} />
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      <Tabs defaultValue="expenses">
+        <TabsList>
+          <TabsTrigger value="expenses">All expenses</TabsTrigger>
+          <TabsTrigger value="invoices">
+            Invoices
+            {invoiceNotice && invoiceNotice.count > 0 && (
+              <Badge variant="destructive" className="ml-2 h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                {invoiceNotice.count}
+              </Badge>
+            )}
+          </TabsTrigger>
+          {isManager && <TabsTrigger value="reports">Reports & recipients</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="expenses" className="mt-4">
+          <Card>
+            <CardHeader className="flex-row flex-wrap items-center gap-3 space-y-0">
+              <Select value={fCategory} onValueChange={setFCategory}>
+                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All categories</SelectItem>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{EXPENSE_CATEGORY_LABEL[c]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={fTeam} onValueChange={setFTeam}>
+                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All teams</SelectItem>
+                  {teams.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input type="date" className="w-36" value={fFrom} onChange={(e) => setFFrom(e.target.value)} aria-label="From date" />
+              <Input type="date" className="w-36" value={fTo} onChange={(e) => setFTo(e.target.value)} aria-label="To date" />
+              {(fCategory !== "ALL" || fTeam !== "ALL" || fFrom || fTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setFCategory("ALL");
+                    setFTeam("ALL");
+                    setFFrom("");
+                    setFTo("");
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {!expenses ? (
+                <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : expenses.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No expenses match the filters.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead className="hidden md:table-cell">Paid to</TableHead>
+                      <TableHead className="hidden lg:table-cell">Team</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {expenses.map((e) => (
+                      <TableRow key={e.id}>
+                        <TableCell className="whitespace-nowrap text-sm">{formatKey(e.date.slice(0, 10))}</TableCell>
+                        <TableCell className="max-w-56">
+                          <p className="truncate text-sm font-medium">{e.title}</p>
+                          {e.description && <p className="truncate text-xs text-muted-foreground">{e.description}</p>}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px]">{EXPENSE_CATEGORY_LABEL[e.category]}</Badge>
+                        </TableCell>
+                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{e.party ?? "—"}</TableCell>
+                        <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">{e.team?.name ?? "—"}</TableCell>
+                        <TableCell className="whitespace-nowrap text-right text-sm font-semibold">{rupees(e.amount)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              aria-label="Edit"
+                              onClick={() => {
+                                setEditing(e);
+                                setFormOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-600" aria-label="Delete" onClick={() => removeExpense(e.id, e.title)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invoices" className="mt-4 space-y-4">
+          {invoiceNotice && invoiceNotice.count > 0 && (
+            <Card className="border-amber-300 bg-amber-50 text-amber-950">
+              <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <BellRing className="mt-0.5 h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-medium">
+                      {invoiceNotice.overdueCount > 0
+                        ? `${invoiceNotice.overdueCount} overdue invoice${invoiceNotice.overdueCount === 1 ? "" : "s"} need attention.`
+                        : `${invoiceNotice.count} invoice${invoiceNotice.count === 1 ? "" : "s"} due by ${formatKey(invoiceNotice.dueThrough)}.`}
+                    </p>
+                    <p className="text-sm opacity-80">These are assigned to you and not yet paid or cancelled.</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="w-fit border-amber-700/40 text-amber-950">Due soon</Badge>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="flex-row flex-wrap items-center gap-3 space-y-0">
+              <Select value={iStatus} onValueChange={setIStatus}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All statuses</SelectItem>
+                  {INVOICE_STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>{INVOICE_STATUS_LABEL[status]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={iType} onValueChange={setIType}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All types</SelectItem>
+                  {INVOICE_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>{INVOICE_TYPE_LABEL[type]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isManager && users && (
+                <Select value={iResponsible} onValueChange={setIResponsible}>
+                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All owners</SelectItem>
+                    {users.filter((u) => u.isActive).map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <Input type="date" className="w-36" value={iFrom} onChange={(e) => setIFrom(e.target.value)} aria-label="Invoice due from" />
+              <Input type="date" className="w-36" value={iTo} onChange={(e) => setITo(e.target.value)} aria-label="Invoice due to" />
+              {(iStatus !== "ALL" || iType !== "ALL" || iResponsible !== "ALL" || iFrom || iTo) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIStatus("ALL");
+                    setIType("ALL");
+                    setIResponsible("ALL");
+                    setIFrom("");
+                    setITo("");
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {!invoices ? (
+                <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+              ) : invoices.length === 0 ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">No invoices match the filters.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Due</TableHead>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="hidden md:table-cell">Responsible</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((invoice) => {
+                      const dueKey = invoice.dueDate.slice(0, 10);
+                      const overdue = invoice.status !== "PAID" && invoice.status !== "CANCELLED" && dueKey < serverTodayKey();
+                      return (
+                        <TableRow key={invoice.id}>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            <span className={overdue ? "font-medium text-rose-600" : undefined}>{formatKey(dueKey)}</span>
+                          </TableCell>
+                          <TableCell className="max-w-64">
+                            <p className="truncate text-sm font-medium">{invoice.title}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {invoice.invoiceNumber ? `${invoice.invoiceNumber} - ` : ""}{invoice.source}
+                            </p>
+                          </TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px]">{INVOICE_TYPE_LABEL[invoice.type]}</Badge></TableCell>
+                          <TableCell>
+                            <Badge variant={overdue ? "destructive" : invoice.status === "PAID" ? "secondary" : "outline"} className="text-[10px]">
+                              {overdue ? "Overdue" : INVOICE_STATUS_LABEL[invoice.status]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{invoice.responsibleUser.name}</TableCell>
+                          <TableCell className="whitespace-nowrap text-right text-sm font-semibold">{rupees(invoice.amount)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:text-emerald-600" aria-label="Mark paid" onClick={() => markInvoicePaid(invoice)}>
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                aria-label="Edit invoice"
+                                onClick={() => {
+                                  setEditingInvoice(invoice);
+                                  setInvoiceFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-600 hover:text-rose-600" aria-label="Delete invoice" onClick={() => removeInvoice(invoice.id, invoice.title)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {isManager && (
+          <TabsContent value="reports" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Scheduled email reports</CardTitle>
+                <CardDescription>
+                  Weekly reports are sent every Monday 09:00 and monthly reports on the 1st 09:00 (Vercel Cron — set the
+                  CRON_SECRET environment variable in production).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => sendReport("weekly")}>
+                  <Send className="h-4 w-4" /> Send weekly report now
+                </Button>
+                <Button variant="outline" onClick={() => sendReport("monthly")}>
+                  <Send className="h-4 w-4" /> Send monthly report now
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Report recipients</CardTitle>
+                <CardDescription>
+                  {isDirector
+                    ? "Pick who receives the weekly and monthly expense emails. Subscribing someone also grants them Expenses access."
+                    : "Only Directors can change who receives the reports."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!users ? (
+                  <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}</div>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {users.filter((u) => u.isActive).map((u) => {
+                      const inherent = u.role === "DIRECTOR" || u.role === "ADMIN";
+                      return (
+                        <label key={u.id} className="flex items-center justify-between gap-2 rounded-md border p-2.5 text-sm">
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{u.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {u.email} · {inherent ? "HR / Director" : u.expenseAccess ? "has expense access" : "no expense access"}
+                            </span>
+                          </span>
+                          <Checkbox
+                            checked={u.receivesExpenseReports}
+                            disabled={!isDirector}
+                            onCheckedChange={() => toggleReports(u)}
+                            aria-label={`Toggle reports for ${u.name}`}
+                          />
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+      </Tabs>
+
+      <ExpenseFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        editing={editing}
+        teams={teams}
+        onSaved={async () => {
+          setFormOpen(false);
+          await Promise.all([loadExpenses(), loadAnalytics()]);
+        }}
+      />
+      <InvoiceFormDialog
+        open={invoiceFormOpen}
+        onOpenChange={setInvoiceFormOpen}
+        editing={editingInvoice}
+        teams={teams}
+        users={users}
+        me={me}
+        isManager={isManager}
+        onSaved={async () => {
+          setInvoiceFormOpen(false);
+          await Promise.all([loadInvoices(), loadInvoiceNotice()]);
+        }}
+      />
+    </div>
+  );
+}
+
+function SummaryCard({
+  icon: Icon,
+  label,
+  sub,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  sub: string;
+  value: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-4">
+        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-lg font-semibold leading-tight">{value}</div>
+          <div className="text-xs text-muted-foreground">{label} · {sub}</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExpenseFormDialog({
+  open,
+  onOpenChange,
+  editing,
+  teams,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editing: ExpenseDto | null;
+  teams: TeamDto[];
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("OFFICE_PURCHASE");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(serverTodayKey());
+  const [party, setParty] = useState("");
+  const [teamId, setTeamId] = useState("NONE");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setTitle(editing?.title ?? "");
+      setCategory(editing?.category ?? "OFFICE_PURCHASE");
+      setAmount(editing ? String(editing.amount) : "");
+      setDate(editing ? editing.date.slice(0, 10) : serverTodayKey());
+      setParty(editing?.party ?? "");
+      setTeamId(editing?.teamId ?? "NONE");
+      setPaymentMethod(editing?.paymentMethod ?? "");
+      setDescription(editing?.description ?? "");
+    }
+  }, [open, editing]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const payload = {
+        title,
+        category,
+        amount: Number(amount),
+        date,
+        party: party || undefined,
+        teamId: teamId === "NONE" ? null : teamId,
+        paymentMethod: paymentMethod || undefined,
+        description: description || undefined,
+      };
+      if (editing) {
+        await api(`/api/expenses/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        toast.success("Expense updated.");
+      } else {
+        await api("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
+        toast.success("Expense recorded.");
+      }
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the expense.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit expense" : "Record expense"}</DialogTitle>
+          <DialogDescription>Vendor/client billings, office purchases, event prizes — everything counts.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ex-title">Title</Label>
+            <Input id="ex-title" placeholder="e.g. Monitor for workstation 4" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((c) => (
+                    <SelectItem key={c} value={c}>{EXPENSE_CATEGORY_LABEL[c]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ex-amount">Amount (₹)</Label>
+              <Input id="ex-amount" type="number" min={0.01} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="ex-date">Date</Label>
+              <Input id="ex-date" type="date" max={serverTodayKey()} value={date} onChange={(e) => setDate(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ex-team">Team (optional)</Label>
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No team</SelectItem>
+                  {teams.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="ex-party">Paid to (vendor / client / person)</Label>
+              <Input id="ex-party" placeholder="e.g. Amazon Business" value={party} onChange={(e) => setParty(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ex-pay">Payment method</Label>
+              <Input id="ex-pay" placeholder="e.g. UPI, card, bank transfer" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ex-desc">Notes</Label>
+            <Textarea id="ex-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Saving…" : editing ? "Save changes" : "Record expense"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InvoiceFormDialog({
+  open,
+  onOpenChange,
+  editing,
+  teams,
+  users,
+  me,
+  isManager,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  editing: InvoiceDto | null;
+  teams: TeamDto[];
+  users: UserDto[] | null;
+  me: ReturnType<typeof useUser>;
+  isManager: boolean;
+  onSaved: () => void;
+}) {
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("INCOMING");
+  const [status, setStatus] = useState("PENDING");
+  const [source, setSource] = useState("");
+  const [amount, setAmount] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState(serverTodayKey());
+  const [dueDate, setDueDate] = useState(serverTodayKey());
+  const [paidDate, setPaidDate] = useState("");
+  const [responsibleUserId, setResponsibleUserId] = useState("");
+  const [teamId, setTeamId] = useState("NONE");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setInvoiceNumber(editing?.invoiceNumber ?? "");
+      setTitle(editing?.title ?? "");
+      setType(editing?.type ?? "INCOMING");
+      setStatus(editing?.status ?? "PENDING");
+      setSource(editing?.source ?? "");
+      setAmount(editing ? String(editing.amount) : "");
+      setInvoiceDate(editing ? editing.invoiceDate.slice(0, 10) : serverTodayKey());
+      setDueDate(editing ? editing.dueDate.slice(0, 10) : serverTodayKey());
+      setPaidDate(editing?.paidDate?.slice(0, 10) ?? "");
+      setResponsibleUserId(editing?.responsibleUserId ?? me?.id ?? "");
+      setTeamId(editing?.teamId ?? "NONE");
+      setAttachmentUrl(editing?.attachmentUrl ?? "");
+      setDescription(editing?.description ?? "");
+    }
+  }, [open, editing, me?.id]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const payload = {
+        invoiceNumber: invoiceNumber || undefined,
+        title,
+        type,
+        status,
+        source,
+        amount: Number(amount),
+        invoiceDate,
+        dueDate,
+        paidDate: paidDate || null,
+        responsibleUserId: isManager ? responsibleUserId : me?.id,
+        teamId: teamId === "NONE" ? null : teamId,
+        attachmentUrl: attachmentUrl || undefined,
+        description: description || undefined,
+      };
+      if (!payload.responsibleUserId) throw new Error("Responsible user is required.");
+      if (editing) {
+        await api(`/api/invoices/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+        toast.success("Invoice updated.");
+      } else {
+        await api("/api/invoices", { method: "POST", body: JSON.stringify(payload) });
+        toast.success("Invoice recorded.");
+      }
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save invoice.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const activeUsers = users?.filter((u) => u.isActive) ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{editing ? "Edit invoice" : "Record invoice"}</DialogTitle>
+          <DialogDescription>Track bills from companies, clients, vendors, and other sources.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
+            <div className="space-y-2">
+              <Label htmlFor="inv-title">Title</Label>
+              <Input id="inv-title" placeholder="e.g. November cloud services" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-number">Invoice no.</Label>
+              <Input id="inv-number" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INVOICE_TYPES.map((item) => <SelectItem key={item} value={item}>{INVOICE_TYPE_LABEL[item]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {INVOICE_STATUSES.map((item) => <SelectItem key={item} value={item}>{INVOICE_STATUS_LABEL[item]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="inv-source">Company / source</Label>
+              <Input id="inv-source" placeholder="e.g. Acme Corp" value={source} onChange={(e) => setSource(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-amount">Amount (₹)</Label>
+              <Input id="inv-amount" type="number" min={0.01} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="inv-date">Invoice date</Label>
+              <Input id="inv-date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-due">Due date</Label>
+              <Input id="inv-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inv-paid">Paid date</Label>
+              <Input id="inv-paid" type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Responsible user</Label>
+              {isManager ? (
+                <Select value={responsibleUserId} onValueChange={setResponsibleUserId}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select user" /></SelectTrigger>
+                  <SelectContent>
+                    {activeUsers.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input value={me?.name ?? ""} disabled />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Team</Label>
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No team</SelectItem>
+                  {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inv-attachment">Attachment URL</Label>
+            <Input id="inv-attachment" value={attachmentUrl} onChange={(e) => setAttachmentUrl(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="inv-desc">Notes</Label>
+            <Textarea id="inv-desc" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Saving..." : editing ? "Save changes" : "Record invoice"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

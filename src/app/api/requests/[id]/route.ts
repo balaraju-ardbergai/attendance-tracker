@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { ApiError, handleRoute, ok, readJson, requireActiveUser } from "@/lib/api";
+import { canReviewRequestOf } from "@/lib/permissions";
 import { fromKey, serverTodayKey, toKey } from "@/lib/dates";
 import { AUDIT, logAudit } from "@/lib/audit";
 import { REQUEST_STATUS_LABEL, REQUEST_TYPE_LABEL } from "@/lib/roles";
@@ -20,7 +21,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
     if (!request) throw new ApiError(404, "Request not found.");
 
-    const isManager = session.role === "ADMIN" || session.role === "DIRECTOR";
+    const canReview = await canReviewRequestOf(session, request.userId);
 
     if (action === "CANCEL") {
       if (request.userId !== session.userId) throw new ApiError(403, "You can only cancel your own requests.");
@@ -38,7 +39,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return ok({ request: updated, message: "Request cancelled." });
     }
 
-    if (!isManager) throw new ApiError(403, "Only HR Admins and Directors can review requests.");
+    if (!canReview) throw new ApiError(403, "Only HR Admins, Directors or the requester's team lead can review requests.");
     if (request.status !== "PENDING") {
       throw new ApiError(409, `This request has already been ${REQUEST_STATUS_LABEL[request.status].toLowerCase()}.`);
     }

@@ -40,6 +40,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
 import { useUser } from "@/components/user-context";
 import { api, initials } from "@/lib/client";
 import { ROLE_LABEL } from "@/lib/roles";
@@ -53,6 +55,9 @@ type UserDto = {
   pictureUrl: string | null;
   isActive: boolean;
   createdAt: string;
+  managerId: string | null;
+  expenseAccess: boolean;
+  receivesExpenseReports: boolean;
 };
 
 export default function UsersPage() {
@@ -61,8 +66,11 @@ export default function UsersPage() {
 
   const [users, setUsers] = useState<UserDto[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<UserDto | null>(null);
+  const [managerTarget, setManagerTarget] = useState<UserDto | null>(null);
+  const [managerId, setManagerId] = useState("NONE");
   const [created, setCreated] = useState<{ name: string; tempPassword: string } | null>(null);
 
   const [name, setName] = useState("");
@@ -72,6 +80,7 @@ export default function UsersPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const [usersRes, approvalsRes] = await Promise.all([
         api<{ users: UserDto[] }>("/api/users"),
@@ -83,6 +92,8 @@ export default function UsersPage() {
       setPendingCount(approvalsRes.pendingCount);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load users.");
+    } finally {
+      setLoading(false);
     }
   }, [isDirector]);
 
@@ -154,16 +165,31 @@ export default function UsersPage() {
     }
   }
 
+  async function saveManager(e: React.FormEvent) {
+    e.preventDefault();
+    if (!managerTarget) return;
+    setSubmitting(true);
+    try {
+      const data = await api<{ message: string }>(`/api/users/${managerTarget.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "SET_MANAGER", managerId: managerId === "NONE" ? null : managerId }),
+      });
+      toast.success(data.message);
+      setManagerTarget(null);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not set the manager.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Users</h1>
-          <p className="text-sm text-muted-foreground">
-            Add people and manage their roles. Major changes need Director approval
-            {isDirector ? " — you can apply them directly." : "."}
-          </p>
-        </div>
+      <PageHeader
+        title="Users"
+        description={`Add people and manage their roles. Major changes need Director approval${isDirector ? " — you can apply them directly." : "."}`}
+      >
         <Button
           onClick={() => {
             resetAddForm();
@@ -172,7 +198,7 @@ export default function UsersPage() {
         >
           <UserPlus className="h-4 w-4" /> Add user
         </Button>
-      </div>
+      </PageHeader>
 
       {isDirector && pendingCount > 0 && (
         <Card>
@@ -202,6 +228,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {loading && users.length === 0 && <UserTableSkeleton />}
               {users.map((u) => (
                 <TableRow key={u.id} className={!u.isActive ? "opacity-60" : undefined}>
                   <TableCell>
@@ -221,7 +248,14 @@ export default function UsersPage() {
                       {ROLE_LABEL[u.role]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="hidden text-sm md:table-cell">{u.department ?? "—"}</TableCell>
+                  <TableCell className="hidden text-sm md:table-cell">
+                    {u.department ?? "—"}
+                    {u.managerId && (
+                      <span className="block text-xs text-muted-foreground">
+                        Manager: {users.find((x) => x.id === u.managerId)?.name ?? "—"}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={u.isActive ? "border-emerald-500/50 text-emerald-600" : "text-muted-foreground"}>
                       {u.isActive ? "Active" : "Inactive"}
@@ -258,6 +292,26 @@ export default function UsersPage() {
                               {isDirector ? "Change to Employee" : "Request role change"}
                             </DropdownMenuItem>
                           )}
+                          {u.isActive && (
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setManagerTarget(u);
+                                setManagerId(u.managerId ?? "NONE");
+                              }}
+                            >
+                              Set manager…
+                            </DropdownMenuItem>
+                          )}
+                          {u.isActive && !u.expenseAccess && (
+                            <DropdownMenuItem onClick={() => patchUser(u.id, "GRANT_EXPENSE")}>
+                              Grant expense access
+                            </DropdownMenuItem>
+                          )}
+                          {u.expenseAccess && (
+                            <DropdownMenuItem onClick={() => patchUser(u.id, "REVOKE_EXPENSE")}>
+                              Revoke expense access
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
                           {u.isActive ? (
                             <DropdownMenuItem
@@ -277,6 +331,13 @@ export default function UsersPage() {
                   </TableCell>
                 </TableRow>
               ))}
+              {!loading && users.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -356,7 +417,6 @@ export default function UsersPage() {
                       <SelectContent>
                         <SelectItem value="EMPLOYEE">Employee</SelectItem>
                         {isDirector && <SelectItem value="ADMIN">HR Admin</SelectItem>}
-                        {isDirector && <SelectItem value="DIRECTOR">Director</SelectItem>}
                       </SelectContent>
                     </Select>
                   </div>
@@ -406,6 +466,69 @@ export default function UsersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Set manager dialog */}
+      <Dialog open={managerTarget !== null} onOpenChange={(open) => !open && setManagerTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set manager</DialogTitle>
+            <DialogDescription>{managerTarget?.email} — shown in the Org Graph.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={saveManager} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Reports to</Label>
+              <Select value={managerId} onValueChange={setManagerId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No manager</SelectItem>
+                  {users
+                    .filter((x) => x.isActive && x.id !== managerTarget?.id)
+                    .map((x) => (
+                      <SelectItem key={x.id} value={x.id}>
+                        {x.name} ({ROLE_LABEL[x.role]})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setManagerTarget(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function UserTableSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <TableRow key={i}>
+          <TableCell>
+            <div className="flex items-center gap-2.5">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-44" />
+              </div>
+            </div>
+          </TableCell>
+          <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-28" /></TableCell>
+          <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+          <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell className="text-right"><Skeleton className="ml-auto h-8 w-20" /></TableCell>
+        </TableRow>
+      ))}
+    </>
   );
 }

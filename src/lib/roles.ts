@@ -27,6 +27,51 @@ export const ATTENDANCE_STATUS_LABEL: Record<string, string> = {
   ABSENT: "Absent",
 };
 
+export const COURSE_ATTENDANCE_LABEL: Record<string, string> = {
+  PRESENT: "Present",
+  ABSENT: "Absent",
+  EXCUSED: "Excused",
+};
+
+export const COURSE_STATUS_LABEL: Record<string, string> = {
+  NOT_STARTED: "Not started",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+};
+
+export const EXPENSE_CATEGORY_LABEL: Record<string, string> = {
+  VENDOR_BILLING: "Vendor Billing",
+  CLIENT_BILLING: "Client Billing",
+  OFFICE_PURCHASE: "Office Purchase",
+  EVENT_PRIZE: "Event / Prize Money",
+  OTHER: "Other",
+};
+
+export const INVOICE_TYPE_LABEL: Record<string, string> = {
+  INCOMING: "Incoming",
+  OUTGOING: "Outgoing",
+};
+
+export const INVOICE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  SENT: "Sent",
+  PENDING: "Pending",
+  PAID: "Paid",
+  CANCELLED: "Cancelled",
+};
+
+export const TASK_STATUS_LABEL: Record<string, string> = {
+  TODO: "To do",
+  IN_PROGRESS: "In progress",
+  COMPLETED: "Completed",
+};
+
+export const TASK_PRIORITY_LABEL: Record<string, string> = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+};
+
 export const APPROVAL_TYPE_LABEL: Record<string, string> = {
   USER_ADD: "Add new user",
   USER_REMOVE: "Remove user",
@@ -51,6 +96,51 @@ export const AUDIT_ACTION_LABEL: Record<string, string> = {
   APPROVAL_REJECTED: "Rejected an approval request",
   PASSWORD_CHANGED: "Changed their password",
   PASSWORD_RESET: "Reset their password",
+  CONNECTOR_LINKED: "Connected an external service",
+  CONNECTOR_UNLINKED: "Disconnected an external service",
+  COURSE_CREATED: "Created a course",
+  COURSE_UPDATED: "Updated a course",
+  COURSE_DELETED: "Deleted a course",
+  MILESTONE_ADDED: "Added a course milestone",
+  MILESTONE_UPDATED: "Updated a course milestone",
+  MILESTONE_DELETED: "Deleted a course milestone",
+  ENROLLED: "Enrolled a participant",
+  UNENROLLED: "Removed a participant",
+  PROGRESS_UPDATED: "Updated course progress",
+  SESSION_ADDED: "Added course sessions",
+  COURSE_ATTENDANCE_MARKED: "Marked course attendance",
+  EXPENSE_CREATED: "Recorded an expense",
+  EXPENSE_UPDATED: "Updated an expense",
+  EXPENSE_DELETED: "Deleted an expense",
+  INVOICE_CREATED: "Recorded an invoice",
+  INVOICE_UPDATED: "Updated an invoice",
+  INVOICE_DELETED: "Deleted an invoice",
+  EXPENSE_ACCESS_GRANTED: "Granted expense access",
+  EXPENSE_ACCESS_REVOKED: "Revoked expense access",
+    
+  REPORT_RECIPIENT_UPDATED: "Updated report recipients",
+  TEAM_CREATED: "Created a team",
+  TEAM_UPDATED: "Updated a team",
+  TEAM_DELETED: "Deleted a team",
+  TEAM_MEMBER_ADDED: "Added a team member",
+  TEAM_MEMBER_REMOVED: "Removed a team member",
+  MANAGER_SET: "Assigned a manager",
+  TASK_CREATED: "Created a task",
+  TASK_UPDATED: "Updated a task",
+  TASK_DELETED: "Deleted a task",
+  PROJECT_CREATED: "Created a project",
+  PROJECT_UPDATED: "Updated a project",
+  PROJECT_DELETED: "Deleted a project",
+  SPRINT_CREATED: "Created a sprint",
+  SPRINT_UPDATED: "Updated a sprint",
+  SPRINT_DELETED: "Deleted a sprint",
+  PHASE_CREATED: "Created a phase",
+  PHASE_UPDATED: "Updated a phase",
+  PHASE_DELETED: "Deleted a phase",
+  PROFILE_SELF_UPDATED: "Updated personal profile",
+  SKILL_ADDED: "Added a skill",
+  SKILL_UPDATED: "Updated a skill",
+  SKILL_REMOVED: "Removed a skill",
 };
 
 // Status colors used by badges, the month grid and the combined stat bar.

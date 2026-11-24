@@ -28,7 +28,7 @@ function getTransporter(): Transporter | null {
 
 export async function sendMail(mail: { to: string; subject: string; html: string }): Promise<{ delivered: boolean }> {
   const transport = getTransporter();
-  const from = `Attendance Portal <${process.env.GMAIL_USER}>`;
+  const from = `Org Tracker <${process.env.GMAIL_USER}>`;
   if (!transport) {
     console.log(
       `\n===== [dev email - Gmail not configured] =====\nTo: ${mail.to}\nFrom: ${from}\nSubject: ${mail.subject}\n${mail.html}\n=============================================\n`,
@@ -59,16 +59,16 @@ function wrap(title: string, body: string) {
   <div style="max-width:520px;margin:auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #e4e4e7;">
     <h2 style="margin:0 0 16px;color:#18181b;">${escapeHtml(title)}</h2>
     ${body}
-    <p style="margin-top:28px;font-size:12px;color:#71717a;">Attendance Portal — automated message.</p>
+    <p style="margin-top:28px;font-size:12px;color:#71717a;">Org Tracker — automated message.</p>
   </div></body></html>`;
 }
 
 export function inviteEmail(name: string, email: string, tempPassword: string) {
   return {
     to: email,
-    subject: "You have been added to the Attendance Portal",
+    subject: "You have been added to the Org Tracker",
     html: wrap(
-      "Welcome to the Attendance Portal",
+      "Welcome to the Org Tracker",
       `<p>Hi ${escapeHtml(name)},</p>
        <p>An account has been created for you. Sign in at <a href="${appUrl("/login")}">${appUrl("/login")}</a> using:</p>
        <p><b>Email:</b> ${escapeHtml(email)}<br/><b>Temporary password:</b> <code style="background:#f4f4f5;padding:2px 6px;border-radius:4px;">${tempPassword}</code></p>
@@ -94,7 +94,7 @@ export function passwordResetOtpEmail(name: string, email: string, code: string)
 export function passwordChangedEmail(name: string, email: string) {
   return {
     to: email,
-    subject: "Your Attendance Portal password was changed",
+    subject: "Your Org Tracker password was changed",
     html: wrap(
       "Password changed",
       `<p>Hi ${escapeHtml(name)},</p>
@@ -131,7 +131,7 @@ export function approvalRequestedEmail(
 ) {
   return {
     to: directorEmail,
-    subject: "Approval needed in the Attendance Portal",
+    subject: "Approval needed in the Org Tracker",
     html: wrap(
       "Approval requested",
       `<p>Hi ${escapeHtml(directorName)},</p>
@@ -154,7 +154,54 @@ export function approvalOutcomeEmail(
       approved ? "Request approved" : "Request rejected",
       `<p>Hi ${escapeHtml(name)},</p>
        <p>Your request <b>${escapeHtml(what)}</b> was <b>${approved ? "approved" : "rejected"}</b> by a Director.</p>
-       <p><a href="${appUrl()}">Open the Attendance Portal</a></p>`,
+       <p><a href="${appUrl()}">Open the Org Tracker</a></p>`,
     ),
   };
+}
+
+export function expenseReportEmail(
+  recipientName: string,
+  recipientEmail: string,
+  periodLabel: string,
+  summary: { total: number; count: number },
+  byCategory: { label: string; total: number }[],
+  byTeam: { label: string; total: number }[],
+  topExpenses: { title: string; category: string; party: string | null; amount: number; date: string }[],
+) {
+  const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  const rows = (items: { label: string; value: string }[]) =>
+    items.length === 0
+      ? `<tr><td colspan="2" style="padding:6px;color:#71717a;">None recorded.</td></tr>`
+      : items
+          .map(
+            (r) =>
+              `<tr><td style="padding:6px;border-bottom:1px solid #e4e4e7;">${escapeHtml(r.label)}</td><td style="padding:6px;border-bottom:1px solid #e4e4e7;text-align:right;font-weight:600;">${r.value}</td></tr>`,
+          )
+          .join("");
+  const table = (title: string, body: string) =>
+    `<h3 style="margin:20px 0 8px;font-size:14px;color:#18181b;">${escapeHtml(title)}</h3>
+     <table style="width:100%;border-collapse:collapse;font-size:13px;">${body}</table>`;
+
+  return {
+    to: recipientEmail,
+    subject: `Expense report — ${periodLabel}`,
+    html: wrap(
+      `Expense report — ${escapeHtml(periodLabel)}`,
+      `<p>Hi ${escapeHtml(recipientName)},</p>
+       <p>Here is the expense summary for <b>${escapeHtml(periodLabel)}</b>: <b>${fmt(summary.total)}</b> across ${summary.count} expense${summary.count === 1 ? "" : "s"}.</p>
+       ${table("By category", rows(byCategory.map((c) => ({ label: c.label, value: fmt(c.total) }))))}
+       ${table("By team", rows(byTeam.map((t) => ({ label: t.label, value: fmt(t.total) }))))}
+       ${table(
+         "Largest expenses",
+         rows(topExpenses.map((e) => ({ label: `${e.title}${e.party ? ` (${e.party})` : ""} — ${formatDate(e.date)}`, value: fmt(e.amount) }))),
+       )}
+       <p style="margin-top:20px;"><a href="${appUrl("/expenses")}">Open the Expenses dashboard</a></p>`,
+    ),
+  };
+}
+
+function formatDate(key: string) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const [y, m, d] = key.split("-").map(Number);
+  return `${d} ${months[m - 1]} ${y}`;
 }

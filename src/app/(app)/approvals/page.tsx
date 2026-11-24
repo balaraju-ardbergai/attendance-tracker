@@ -24,10 +24,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/client";
 import { formatKey } from "@/lib/dates";
 import { APPROVAL_TYPE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 type ApprovalDto = {
   id: string;
@@ -51,16 +53,20 @@ function payloadRows(payload: Record<string, unknown>): [string, string][] {
 
 export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState<ApprovalDto[]>([]);
+  const [loading, setLoading] = useState(true);
   const [rejectTarget, setRejectTarget] = useState<ApprovalDto | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await api<{ approvals: ApprovalDto[] }>("/api/approvals");
       setApprovals(data.approvals);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load approvals.");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -91,15 +97,11 @@ export default function ApprovalsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Approvals</h1>
-        <p className="text-sm text-muted-foreground">
-          Authorize administrative requests from HR Admins.
-        </p>
-      </div>
+      <PageHeader title="Approvals" description="Authorize administrative requests from HR Admins." />
 
       <div className="space-y-4">
-        {pending.length === 0 && (
+        {loading && approvals.length === 0 && <ApprovalSkeleton />}
+        {!loading && pending.length === 0 && (
           <Card>
             <CardContent className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
               <BadgeCheck className="h-4 w-4" /> You&apos;re all caught up — no pending approvals.
@@ -230,5 +232,30 @@ export default function ApprovalsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function ApprovalSkeleton() {
+  return (
+    <>
+      {Array.from({ length: 2 }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader className="flex-row items-start justify-between space-y-0">
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <Skeleton className="h-5 w-20" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-20 w-full max-w-xl" />
+            <div className="flex gap-2">
+              <Skeleton className="h-8 w-24" />
+              <Skeleton className="h-8 w-20" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </>
   );
 }

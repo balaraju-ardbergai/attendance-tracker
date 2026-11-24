@@ -1,14 +1,18 @@
 import { prisma } from "@/lib/db";
-import { ApiError, handleRoute, ok, readJson, requireUser } from "@/lib/api";
-import { hashPassword, setSessionCookie, verifyPassword } from "@/lib/auth";
+import { ApiError, handleRoute, ok, readJson } from "@/lib/api";
+import { getSession, hashPassword, setSessionCookie, verifyPassword } from "@/lib/auth";
 import { AUDIT, logAudit } from "@/lib/audit";
 import { passwordChangedEmail, sendMail } from "@/lib/mail";
 
 // Used for the mandatory first-login password change (temporary password) and,
 // optionally, for normal self-service changes (current password required then).
+// Deliberately does NOT use requireUser: users with mustResetPassword are
+// blocked from every other API until they complete this.
 export async function POST(req: Request) {
   return handleRoute(async () => {
-    const session = await requireUser();
+    const session = await getSession();
+    if (!session) throw new ApiError(401, "You must sign in first.");
+
     const { currentPassword, newPassword } = await readJson<{
       currentPassword?: string;
       newPassword?: string;

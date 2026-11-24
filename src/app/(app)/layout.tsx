@@ -5,20 +5,29 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BadgeCheck,
+  BookOpen,
   CalendarCheck,
-  CalendarDays,
   ClipboardList,
+  FolderKanban,
+  Gauge,
   History,
   LayoutDashboard,
   LogOut,
+  Network,
+  Plug,
+  UserRound,
   Users,
+  Users2,
+  Wallet,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserContext, type AppUser } from "@/components/user-context";
-import { api, initials } from "@/lib/client";
+import { ChatWidget } from "@/components/chat-widget";
+import { usePortalTheme } from "@/components/theme-provider";
+import { api, clearApiCache, initials, prefetchApi } from "@/lib/client";
 import { ROLE_LABEL } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
@@ -27,20 +36,61 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: AppUser["role"][];
+  needsExpenseAccess?: boolean;
+  badge?: "approvals";
 };
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/attendance", label: "Attendance", icon: CalendarCheck },
-  { href: "/requests", label: "My Requests", icon: ClipboardList },
-  { href: "/dashboard", label: "Organization", icon: LayoutDashboard, roles: ["ADMIN", "DIRECTOR"] },
-  { href: "/users", label: "Users", icon: Users, roles: ["ADMIN", "DIRECTOR"] },
-  { href: "/approvals", label: "Approvals", icon: BadgeCheck, roles: ["DIRECTOR"] },
-  { href: "/audit", label: "HR Activity", icon: History, roles: ["DIRECTOR"] },
+type NavSection = { label: string; items: NavItem[] };
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Work",
+    items: [
+      { href: "/profile", label: "My Profile", icon: UserRound },
+      { href: "/attendance", label: "Attendance", icon: CalendarCheck },
+      { href: "/requests", label: "Requests", icon: ClipboardList },
+      { href: "/projects", label: "Projects", icon: FolderKanban },
+      { href: "/courses", label: "Courses", icon: BookOpen },
+    ],
+  },
+  {
+    label: "Organization",
+    items: [
+      { href: "/teams", label: "Teams", icon: Users2 },
+      { href: "/org-graph", label: "Org Graph", icon: Network },
+      { href: "/expenses", label: "Expenses", icon: Wallet, needsExpenseAccess: true },
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "DIRECTOR"] },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { href: "/users", label: "Users", icon: Users, roles: ["ADMIN", "DIRECTOR"] },
+      { href: "/approvals", label: "Approvals", icon: BadgeCheck, roles: ["DIRECTOR"], badge: "approvals" },
+      { href: "/audit", label: "HR Activity", icon: History, roles: ["DIRECTOR"] },
+      { href: "/connectors", label: "Connectors", icon: Plug },
+    ],
+  },
 ];
+
+function visibleSections(user: AppUser) {
+  return NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter(
+      (item) =>
+        (!item.roles || item.roles.includes(user.role)) &&
+        (!item.needsExpenseAccess ||
+          user.role === "ADMIN" ||
+          user.role === "DIRECTOR" ||
+          user.expenseAccess),
+    ),
+  })).filter((section) => section.items.length > 0);
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { setTheme } = usePortalTheme();
   const [user, setUser] = useState<AppUser | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
@@ -52,6 +102,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         return;
       }
       setUser(data.user);
+      setTheme(data.user.theme);
+      prefetchApi("/api/directory");
+      prefetchApi("/api/theme");
       if (data.user.role === "DIRECTOR") {
         api<{ pendingCount: number }>("/api/approvals")
           .then((d) => setPendingApprovals(d.pendingCount))
@@ -60,7 +113,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } catch {
       router.replace("/login");
     }
-  }, [router]);
+  }, [router, setTheme]);
 
   useEffect(() => {
     void load();
@@ -70,6 +123,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       await api("/api/auth/logout", { method: "POST" });
     } finally {
+      clearApiCache();
       router.replace("/login");
     }
   }
@@ -85,46 +139,74 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const items = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user.role));
+  const sections = visibleSections(user);
 
-  const navLinks = (onNavigate?: () => void) =>
-    items.map((item) => {
-      const active = pathname.startsWith(item.href);
-      const Icon = item.icon;
-      return (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onNavigate}
-          className={cn(
-            "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-            active
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          )}
-        >
-          <Icon className="h-4 w-4 shrink-0" />
-          <span className="truncate">{item.label}</span>
-          {item.href === "/approvals" && pendingApprovals > 0 && (
-            <Badge variant="destructive" className="ml-auto h-5 px-1.5 text-[10px]">
-              {pendingApprovals}
-            </Badge>
-          )}
-        </Link>
-      );
-    });
+  const brand = (
+    <Link href="/attendance" className="flex items-center gap-2.5 px-2 py-1">
+      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+        <Gauge className="h-4.5 w-4.5" />
+      </span>
+      <span className="leading-tight">
+        <span className="block font-semibold tracking-tight">Org Tracker</span>
+        <span className="block text-[10px] uppercase tracking-wider text-muted-foreground">
+          {ROLE_LABEL[user.role]}
+        </span>
+      </span>
+    </Link>
+  );
+
+  const sectionNav = (onNavigate?: () => void) =>
+    sections.map((section) => (
+      <div key={section.label} className="space-y-1">
+        <p className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+          {section.label}
+        </p>
+        {section.items.map((item) => {
+          const active = pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{item.label}</span>
+              {item.badge === "approvals" && pendingApprovals > 0 && (
+                <Badge variant="destructive" className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                  {pendingApprovals}
+                </Badge>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    ));
 
   const userBlock = (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <Avatar className="h-9 w-9">
-        {user.pictureUrl && <AvatarImage src={user.pictureUrl} alt={user.name} />}
-        <AvatarFallback>{initials(user.name)}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{user.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{ROLE_LABEL[user.role]}</p>
-      </div>
-      <Button variant="ghost" size="icon" onClick={signOut} title="Sign out" aria-label="Sign out">
+    <div className="flex items-center gap-1 rounded-xl border bg-card p-1.5 shadow-sm">
+      <Link
+        href="/profile"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 transition-colors hover:bg-muted/60"
+        title="Open My Profile"
+      >
+        <Avatar className="h-9 w-9">
+          {user.pictureUrl && <AvatarImage src={user.pictureUrl} alt={user.name} />}
+          <AvatarFallback className="text-xs">{initials(user.name)}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium leading-tight">{user.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+        </div>
+      </Link>
+      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" onClick={signOut} title="Sign out" aria-label="Sign out">
         <LogOut className="h-4 w-4" />
       </Button>
     </div>
@@ -134,36 +216,46 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <UserContext.Provider value={user}>
       <div className="min-h-screen bg-background">
         {/* Desktop sidebar */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col gap-4 border-r bg-card p-4 md:flex">
-          <Link href="/attendance" className="flex items-center gap-2 px-2 py-1">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <CalendarDays className="h-4 w-4" />
-            </span>
-            <span className="font-semibold">Attendance Portal</span>
-          </Link>
-          <nav className="flex flex-1 flex-col gap-1">{navLinks()}</nav>
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col gap-5 border-r bg-sidebar p-4 md:flex">
+          {brand}
+          <nav className="flex flex-1 flex-col gap-5 overflow-y-auto">{sectionNav()}</nav>
           {userBlock}
         </aside>
 
         {/* Mobile top bar + horizontal nav */}
-        <div className="sticky top-0 z-30 border-b bg-card md:hidden">
+        <div className="sticky top-0 z-30 border-b bg-sidebar md:hidden">
           <div className="flex items-center justify-between px-4 py-2.5">
-            <Link href="/attendance" className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <CalendarDays className="h-3.5 w-3.5" />
-              </span>
-              <span className="text-sm font-semibold">Attendance Portal</span>
-            </Link>
+            {brand}
             <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
-          <nav className="flex gap-1 overflow-x-auto px-3 pb-2">{navLinks()}</nav>
+          <nav className="flex gap-1 overflow-x-auto px-3 pb-2">
+            {sections.flatMap((s) => s.items).map((item) => {
+              const active = pathname.startsWith(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
 
-        <main className="px-4 py-6 sm:px-6 md:ml-60">
+        <main className="px-4 py-6 sm:px-8 md:ml-64 md:py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
+
+        <ChatWidget />
       </div>
     </UserContext.Provider>
   );

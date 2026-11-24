@@ -11,6 +11,9 @@ export type AppUser = {
   department: string | null;
   pictureUrl: string | null;
   mustResetPassword: boolean;
+  expenseAccess: boolean;
+  isTeamLead: boolean;
+  theme: string;
 };
 
 export const UserContext = createContext<AppUser | null>(null);
